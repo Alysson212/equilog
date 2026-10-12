@@ -196,6 +196,9 @@ o estado para cumprido, adiado ou cancelado (RF19). Criação manual de lembrete
 | POST | `/sincronizacao/lote` | Enviar lote de eventos pendentes | Todos | RF21 |
 | GET | `/animais/{id}/exportacao` | Exportar histórico | Prop., vet., treinador | RF22 |
 | GET | `/animais/{id}/auditoria` | Consultar auditoria | Proprietário | RF23 |
+| GET | `/animais/{id}/acessos` | Listar vínculos do animal | Proprietário | RF06, RF07 |
+| GET | `/anexos/{id}` | Baixar anexo | Leitura do domínio do evento | RF20 |
+| GET | `/tipos-evento` | Tipos de evento com `exige_retorno` | Autenticado | RF09 a RF12 |
 
 ### Códigos de estado
 

@@ -124,6 +124,7 @@ usuário, animal e papel vigente (seção 4 da especificação).
 | GET | `/animais/{id}/acessos` | Listar vínculos do animal (proprietário) | RF06, RF07 |
 | GET | `/anexos/{id}` | Baixar anexo | RF20 |
 | POST | `/sincronizacao/lote` | Enviar lote de eventos pendentes | RF21 |
+| GET | `/tipos-evento` | Tipos de evento por domínio | RF09 a RF12 |
 
 ## Aplicativo móvel
 
