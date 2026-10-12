@@ -39,12 +39,31 @@ class _TelaRegistroEventoState extends State<TelaRegistroEvento> {
   DateTime _dataEvento = DateTime.now();
   DateTime? _dataRetorno;
   bool _salvando = false;
+  // tipos de GET /tipos-evento; ate a resposta, o conjunto de contingencia
+  Map<String, List<TipoEvento>> _tipos = tiposDeContingencia;
+  OrigemTipos? _origemTipos;
 
   @override
   void initState() {
     super.initState();
     _dominios = dominiosRegistraveis(widget.animal.papel);
     _dominio = _dominios.first;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_origemTipos == null) _carregarTipos();
+  }
+
+  Future<void> _carregarTipos() async {
+    final (tipos, origem) = await Dependencias.de(context).tiposEvento();
+    if (!mounted) return;
+    setState(() {
+      _tipos = tipos;
+      _origemTipos = origem;
+      if (_tipo != null && !(tipos[_dominio] ?? const []).contains(_tipo)) _tipo = null;
+    });
   }
 
   @override
@@ -213,11 +232,11 @@ class _TelaRegistroEventoState extends State<TelaRegistroEvento> {
               child: Text(nomesDominio[_dominio]!, style: Theme.of(context).textTheme.titleMedium),
             ),
           DropdownButtonFormField<TipoEvento>(
-            key: ValueKey('tipo-$_dominio'),
+            key: ValueKey('tipo-$_dominio-$_origemTipos'),
             initialValue: _tipo,
             decoration: const InputDecoration(labelText: 'Tipo *', border: OutlineInputBorder()),
             items: [
-              for (final tipo in tiposPorDominio[_dominio]!)
+              for (final tipo in _tipos[_dominio] ?? const <TipoEvento>[])
                 DropdownMenuItem(value: tipo, child: Text(nomesTipo[tipo.nome] ?? tipo.nome)),
             ],
             onChanged: (tipo) => setState(() => _tipo = tipo),

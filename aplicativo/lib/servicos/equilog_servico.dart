@@ -33,6 +33,9 @@ class EquilogServico {
   Future<Animal> cadastrarAnimal(Map<String, dynamic> dados) async =>
       Animal.deJson(await api.post('/animais', dados) as Map<String, dynamic>);
 
+  Future<List<dynamic>> listarTiposEvento() async =>
+      (await api.get('/tipos-evento') as Map<String, dynamic>)['itens'] as List<dynamic>;
+
   Future<PaginaLinhaDoTempo> linhaDoTempo(
     String animalId, {
     FiltrosLinhaDoTempo filtros = const FiltrosLinhaDoTempo(),

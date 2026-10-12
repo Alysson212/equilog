@@ -6,8 +6,9 @@
 // retorno tambem e obrigatoria no formulario (cinco no total). O sistema nao
 // propoe nem calcula essa data: a pessoa a digita (RNF11).
 //
-// Tipos de evento: espelho da carga inicial de tipo_evento (especificacao,
-// secao 3). Nao ha endpoint de tipos; a lista e fixa na especificacao.
+// Tipos de evento: vem de GET /tipos-evento. A lista fixa abaixo, espelho da
+// carga inicial (especificacao, secao 3), e apenas contingencia para o aparelho
+// sem conexao e sem nenhuma lista recebida antes.
 
 enum TipoCampo { texto, textoLongo, inteiro, decimal, data }
 
@@ -25,9 +26,27 @@ class TipoEvento {
   final String nome;
   final bool exigeRetorno;
   const TipoEvento(this.nome, {this.exigeRetorno = false});
+
+  @override
+  bool operator ==(Object other) => other is TipoEvento && other.nome == nome && other.exigeRetorno == exigeRetorno;
+
+  @override
+  int get hashCode => Object.hash(nome, exigeRetorno);
 }
 
-const Map<String, List<TipoEvento>> tiposPorDominio = {
+// Agrupa por dominio a resposta de GET /tipos-evento
+Map<String, List<TipoEvento>> agruparTipos(List<dynamic> itens) {
+  final grupos = <String, List<TipoEvento>>{};
+  for (final bruto in itens) {
+    final item = bruto as Map<String, dynamic>;
+    grupos.putIfAbsent(item['dominio'] as String, () => []).add(
+          TipoEvento(item['nome'] as String, exigeRetorno: item['exigeRetorno'] as bool),
+        );
+  }
+  return grupos;
+}
+
+const Map<String, List<TipoEvento>> tiposDeContingencia = {
   'saude': [
     TipoEvento('vacinacao', exigeRetorno: true),
     TipoEvento('vermifugacao', exigeRetorno: true),

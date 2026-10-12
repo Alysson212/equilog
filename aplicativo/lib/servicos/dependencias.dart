@@ -4,11 +4,14 @@
 import 'package:flutter/widgets.dart';
 
 import '../modelos/entidades.dart';
+import '../modelos/formularios_evento.dart';
 import '../sincronizacao/base_local.dart';
 import '../sincronizacao/fila_sincronizacao.dart';
 import 'api_cliente.dart';
 import 'equilog_servico.dart';
 import 'notificacoes_servico.dart';
+
+enum OrigemTipos { servidor, ultimaListaRecebida, contingencia }
 
 class Dependencias {
   final ApiCliente api;
@@ -45,6 +48,22 @@ class Dependencias {
       doCache = true;
     }
     return (itens.map((j) => Animal.deJson(j as Map<String, dynamic>)).toList(), doCache);
+  }
+
+  // Tipos de evento do servidor; sem conexao, a ultima lista recebida; sem
+  // nenhuma lista recebida, o conjunto local de contingencia
+  Future<(Map<String, List<TipoEvento>>, OrigemTipos)> tiposEvento() async {
+    const chave = 'tipos_evento';
+    try {
+      final itens = await servico.listarTiposEvento();
+      await base.guardarCache(chave, itens);
+      return (agruparTipos(itens), OrigemTipos.servidor);
+    } on Exception catch (erro) {
+      if (erro is! SemConexaoException && erro is! SessaoExpiradaException) rethrow;
+      final cache = await base.lerCache(chave) as List<dynamic>?;
+      if (cache != null) return (agruparTipos(cache), OrigemTipos.ultimaListaRecebida);
+      return (tiposDeContingencia, OrigemTipos.contingencia);
+    }
   }
 
   // Sincroniza a fila e o agendamento de notificacoes, sem interromper a tela
