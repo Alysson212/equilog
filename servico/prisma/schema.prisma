@@ -1,0 +1,256 @@
+// Esquema de dados do EquiLog (especificacao, secao 3; Figura 3 do TCC).
+// Modelos em PascalCase mapeados para tabelas e colunas em snake_case.
+// O indice parcial idx_evento_animal_data e as restricoes CHECK de dominio e
+// status nao tem representacao no Prisma e estao na migracao inicial em SQL.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Usuario {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nome      String   @db.VarChar(120)
+  email     String   @unique @db.VarChar(160)
+  senhaHash String   @map("senha_hash") @db.VarChar(255)
+  telefone  String?  @db.VarChar(20)
+  ativo     Boolean  @default(true)
+  criadoEm  DateTime @default(now()) @map("criado_em") @db.Timestamptz
+
+  animaisProprios    Animal[]          @relation("ProprietarioAnimal")
+  vinculos           VinculoAcesso[]   @relation("UsuarioVinculo")
+  vinculosConcedidos VinculoAcesso[]   @relation("ConcedenteVinculo")
+  eventos            Evento[]          @relation("AutorEvento")
+  historicos         EventoHistorico[]
+  anexos             Anexo[]
+  lembretes          Lembrete[]
+  auditorias         LogAuditoria[]
+
+  @@map("usuario")
+}
+
+model Papel {
+  id        Int     @id @default(autoincrement())
+  nome      String  @unique @db.VarChar(40)
+  descricao String? @db.VarChar(160)
+
+  permissoes PapelPermissao[]
+  vinculos   VinculoAcesso[]
+
+  @@map("papel")
+}
+
+model Permissao {
+  id        Int     @id @default(autoincrement())
+  codigo    String  @unique @db.VarChar(60)
+  descricao String? @db.VarChar(160)
+
+  papeis PapelPermissao[]
+
+  @@map("permissao")
+}
+
+model PapelPermissao {
+  papelId     Int @map("papel_id")
+  permissaoId Int @map("permissao_id")
+
+  papel     Papel     @relation(fields: [papelId], references: [id])
+  permissao Permissao @relation(fields: [permissaoId], references: [id])
+
+  @@id([papelId, permissaoId])
+  @@map("papel_permissao")
+}
+
+model Animal {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nome               String    @db.VarChar(120)
+  registroAssociacao String?   @map("registro_associacao") @db.VarChar(40)
+  dataNascimento     DateTime? @map("data_nascimento") @db.Date
+  sexo               String    @db.Char(1)
+  pelagem            String?   @db.VarChar(60)
+  proprietarioId     String    @map("proprietario_id") @db.Uuid
+  ativo              Boolean   @default(true)
+
+  proprietario Usuario         @relation("ProprietarioAnimal", fields: [proprietarioId], references: [id])
+  vinculos     VinculoAcesso[]
+  eventos      Evento[]
+  lembretes    Lembrete[]
+
+  @@map("animal")
+}
+
+model VinculoAcesso {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  usuarioId    String    @map("usuario_id") @db.Uuid
+  animalId     String    @map("animal_id") @db.Uuid
+  papelId      Int       @map("papel_id")
+  dataInicio   DateTime  @map("data_inicio") @db.Date
+  dataFim      DateTime? @map("data_fim") @db.Date
+  concedidoPor String    @map("concedido_por") @db.Uuid
+  ativo        Boolean   @default(true)
+
+  usuario    Usuario @relation("UsuarioVinculo", fields: [usuarioId], references: [id])
+  animal     Animal  @relation(fields: [animalId], references: [id])
+  papel      Papel   @relation(fields: [papelId], references: [id])
+  concedente Usuario @relation("ConcedenteVinculo", fields: [concedidoPor], references: [id])
+
+  @@map("vinculo_acesso")
+}
+
+model TipoEvento {
+  id           Int     @id @default(autoincrement())
+  dominio      String  @db.VarChar(12)
+  nome         String  @db.VarChar(60)
+  exigeRetorno Boolean @map("exige_retorno")
+
+  eventos Evento[]
+
+  @@map("tipo_evento")
+}
+
+model Evento {
+  // id gerado no cliente (RF21, RNF06): sem valor padrao no banco
+  id            String    @id @db.Uuid
+  animalId      String    @map("animal_id") @db.Uuid
+  tipoEventoId  Int       @map("tipo_evento_id")
+  dataEvento    DateTime  @map("data_evento") @db.Timestamptz
+  titulo        String    @db.VarChar(140)
+  observacao    String?   @db.Text
+  registradoPor String    @map("registrado_por") @db.Uuid
+  versao        Int       @default(1)
+  excluidoEm    DateTime? @map("excluido_em") @db.Timestamptz
+  criadoEm      DateTime  @default(now()) @map("criado_em") @db.Timestamptz
+  atualizadoEm  DateTime  @default(now()) @updatedAt @map("atualizado_em") @db.Timestamptz
+
+  animal     Animal     @relation(fields: [animalId], references: [id])
+  tipoEvento TipoEvento @relation(fields: [tipoEventoId], references: [id])
+  autor      Usuario    @relation("AutorEvento", fields: [registradoPor], references: [id])
+
+  saude       EventoSaude?
+  manejo      EventoManejo?
+  treinamento EventoTreinamento?
+  competicao  EventoCompeticao?
+  historicos  EventoHistorico[]
+  anexos      Anexo[]
+  lembretes   Lembrete[]
+
+  @@map("evento")
+}
+
+// Subtipos: chave primaria compartilhada com evento (estrategia de supertipo e subtipos)
+
+model EventoSaude {
+  eventoId     String    @id @map("evento_id") @db.Uuid
+  procedimento String    @db.VarChar(80)
+  produto      String?   @db.VarChar(120)
+  dose         String?   @db.VarChar(40)
+  via          String?   @db.VarChar(40)
+  profissional String?   @db.VarChar(120)
+  dataRetorno  DateTime? @map("data_retorno") @db.Date
+
+  evento Evento @relation(fields: [eventoId], references: [id], onDelete: Cascade)
+
+  @@map("evento_saude")
+}
+
+model EventoManejo {
+  eventoId   String   @id @map("evento_id") @db.Uuid
+  categoria  String   @db.VarChar(60)
+  descricao  String?  @db.VarChar(200)
+  quantidade Decimal? @db.Decimal(8, 2)
+  unidade    String?  @db.VarChar(12)
+
+  evento Evento @relation(fields: [eventoId], references: [id], onDelete: Cascade)
+
+  @@map("evento_manejo")
+}
+
+model EventoTreinamento {
+  eventoId      String  @id @map("evento_id") @db.Uuid
+  tipoExercicio String  @map("tipo_exercicio") @db.VarChar(60)
+  duracaoMin    Int?    @map("duracao_min")
+  intensidade   String? @db.VarChar(20)
+  piso          String? @db.VarChar(40)
+
+  evento Evento @relation(fields: [eventoId], references: [id], onDelete: Cascade)
+
+  @@map("evento_treinamento")
+}
+
+model EventoCompeticao {
+  eventoId      String   @id @map("evento_id") @db.Uuid
+  nomeProva     String   @map("nome_prova") @db.VarChar(140)
+  local         String?  @db.VarChar(140)
+  categoria     String?  @db.VarChar(60)
+  tempoSegundos Decimal? @map("tempo_segundos") @db.Decimal(6, 3)
+  colocacao     Int?
+  penalidade    Decimal? @db.Decimal(6, 3)
+
+  evento Evento @relation(fields: [eventoId], references: [id], onDelete: Cascade)
+
+  @@map("evento_competicao")
+}
+
+model EventoHistorico {
+  id               BigInt   @id @default(autoincrement())
+  eventoId         String   @map("evento_id") @db.Uuid
+  versaoAnterior   Int      @map("versao_anterior")
+  conteudoAnterior Json     @map("conteudo_anterior") @db.JsonB
+  alteradoPor      String   @map("alterado_por") @db.Uuid
+  alteradoEm       DateTime @default(now()) @map("alterado_em") @db.Timestamptz
+
+  evento Evento  @relation(fields: [eventoId], references: [id])
+  autor  Usuario @relation(fields: [alteradoPor], references: [id])
+
+  @@map("evento_historico")
+}
+
+model Anexo {
+  id           String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  eventoId     String  @map("evento_id") @db.Uuid
+  nomeArquivo  String  @map("nome_arquivo") @db.VarChar(200)
+  caminho      String  @db.VarChar(300)
+  mimeType     String? @map("mime_type") @db.VarChar(80)
+  tamanhoBytes Int?    @map("tamanho_bytes")
+  enviadoPor   String  @map("enviado_por") @db.Uuid
+
+  evento Evento  @relation(fields: [eventoId], references: [id])
+  autor  Usuario @relation(fields: [enviadoPor], references: [id])
+
+  @@map("anexo")
+}
+
+model Lembrete {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  eventoId     String   @map("evento_id") @db.Uuid
+  animalId     String   @map("animal_id") @db.Uuid
+  dataPrevista DateTime @map("data_prevista") @db.Date
+  status       String   @default("pendente") @db.VarChar(12)
+  criadoPor    String   @map("criado_por") @db.Uuid
+
+  evento Evento  @relation(fields: [eventoId], references: [id])
+  animal Animal  @relation(fields: [animalId], references: [id])
+  autor  Usuario @relation(fields: [criadoPor], references: [id])
+
+  @@map("lembrete")
+}
+
+model LogAuditoria {
+  id                     BigInt   @id @default(autoincrement())
+  usuarioId              String?  @map("usuario_id") @db.Uuid
+  identificadorTentativa String?  @map("identificador_tentativa") @db.VarChar(160)
+  acao                   String   @db.VarChar(40)
+  entidade               String?  @db.VarChar(40)
+  entidadeId             String?  @map("entidade_id") @db.VarChar(60)
+  motivo                 String?  @db.VarChar(60)
+  dataHora               DateTime @default(now()) @map("data_hora") @db.Timestamptz
+  enderecoIp             String?  @map("endereco_ip") @db.VarChar(45)
+
+  usuario Usuario? @relation(fields: [usuarioId], references: [id])
+
+  @@map("log_auditoria")
+}
