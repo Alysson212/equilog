@@ -7,6 +7,8 @@ const { autorizar } = require("../middlewares/autorizacao");
 const { DOMINIOS_EVENTO } = require("../dominio/matrizPermissoes");
 const { exigirObjeto } = require("../dominio/validacao");
 const { falhaDeValidacao } = require("../dominio/erros");
+const eventoServico = require("../servicos/eventoServico");
+const linhaDoTempoServico = require("../servicos/linhaDoTempoServico");
 
 const rotas = express.Router({ mergeParams: true });
 
@@ -25,13 +27,28 @@ function exigirDominio(req, res, next) {
   }
 }
 
+rotas.get(
+  "/",
+  autorizar("ler", "animal"),
+  assincrono(async (req, res) => {
+    const resultado = await linhaDoTempoServico.consultarLinhaDoTempo(
+      req.contextoAuditoria,
+      req.vinculo,
+      req.params.animalId,
+      req.query,
+    );
+    res.status(200).json(resultado);
+  }),
+);
+
 rotas.post(
   "/",
   exigirDominio,
   autorizar("criar", (req) => req.body.dominio),
   assincrono(async (req, res) => {
-    // registro implementado na Etapa 3
-    res.status(501).json({ erro: "Registro de eventos ainda não disponível." });
+    const { evento, criado } = await eventoServico.registrar(req.contextoAuditoria, req.params.animalId, req.body);
+    // reenvio de evento ja gravado pelo mesmo autor: 200, sem duplicar
+    res.status(criado ? 201 : 200).location(`/eventos/${evento.id}`).json(evento);
   }),
 );
 

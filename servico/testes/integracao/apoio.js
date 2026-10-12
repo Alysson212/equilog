@@ -1,6 +1,7 @@
 // Apoio aos testes de integracao: requisicoes ao app, criacao de usuarios,
 // animais e vinculos pela propria API, e consulta da trilha de auditoria.
 
+const { randomUUID } = require("node:crypto");
 const request = require("supertest");
 const { app } = require("../../src/app");
 const { prisma } = require("../../src/repositorios/prisma");
@@ -72,6 +73,32 @@ async function montarCenario() {
   return { proprietario, veterinario, treinador, manejo, animal };
 }
 
+// Corpo valido de evento por dominio, com id gerado "no cliente"
+const MODELOS_EVENTO = {
+  saude: { tipoEvento: "vacinacao", titulo: "Vacinacao", detalhe: { procedimento: "vacinacao" } },
+  manejo: { tipoEvento: "casqueamento", titulo: "Casqueamento", detalhe: { categoria: "casco" } },
+  treinamento: { tipoEvento: "trabalho de tambor", titulo: "Treino", detalhe: { tipoExercicio: "tambor" } },
+  competicao: { tipoEvento: "prova oficial", titulo: "Prova", detalhe: { nomeProva: "Copa Regional" } },
+};
+
+function novoEvento(dominio, extra = {}) {
+  const modelo = MODELOS_EVENTO[dominio];
+  return {
+    id: randomUUID(),
+    dominio,
+    dataEvento: "2026-03-14T09:30:00-03:00",
+    ...modelo,
+    ...extra,
+    detalhe: { ...modelo.detalhe, ...(extra.detalhe ?? {}) },
+  };
+}
+
+async function registrarEvento(usuario, animalId, corpo) {
+  const resposta = await api(usuario.token).post(`/animais/${animalId}/eventos`).send(corpo);
+  if (resposta.status !== 201) throw new Error(`evento falhou: ${resposta.status} ${JSON.stringify(resposta.body)}`);
+  return resposta.body;
+}
+
 function registrosDeAuditoria(filtro) {
   return prisma.logAuditoria.findMany({ where: filtro, orderBy: { id: "asc" } });
 }
@@ -92,6 +119,8 @@ module.exports = {
   criarAnimal,
   conceder,
   montarCenario,
+  novoEvento,
+  registrarEvento,
   registrosDeAuditoria,
   decodificarToken,
   encerrar,
