@@ -1,0 +1,26 @@
+# segredos
+.env
+*.env
+!.env.example
+
+# dependencias e artefatos
+node_modules/
+coverage/
+
+# certificados gerados localmente
+servico/certs/
+
+# anexos enviados em desenvolvimento
+servico/armazenamento/
+
+# Flutter
+aplicativo/.dart_tool/
+aplicativo/build/
+aplicativo/.flutter-plugins
+aplicativo/.flutter-plugins-dependencies
+
+# sistema e editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

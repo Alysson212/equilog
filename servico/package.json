@@ -1,0 +1,36 @@
+{
+  "name": "equilog-servico",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Servico REST do EquiLog: autenticacao, autorizacao por papel e registro de eventos de equinos atletas",
+  "main": "src/app.js",
+  "engines": {
+    "node": ">=20 <21"
+  },
+  "scripts": {
+    "start": "node src/app.js",
+    "certificado": "sh scripts/gerar-certificado.sh",
+    "prisma:migrar": "prisma migrate dev",
+    "prisma:aplicar": "prisma migrate deploy",
+    "prisma:seed": "prisma db seed",
+    "test": "jest --runInBand",
+    "test:cobertura": "jest --runInBand --coverage"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "roots": [
+      "<rootDir>/testes"
+    ]
+  },
+  "dependencies": {
+    "@prisma/client": "6.19.3",
+    "express": "4.22.3"
+  },
+  "devDependencies": {
+    "jest": "30.5.2",
+    "prisma": "6.19.3"
+  }
+}

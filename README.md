@@ -1,0 +1,143 @@
+# EquiLog
+
+Protótipo acadêmico de registro integrado de saúde, manejo, treinamento e
+desempenho de equinos atletas da modalidade de três tambores, com controle de
+acesso baseado em papéis. Acompanha o Trabalho de Curso de Ciência da Computação
+(UNIP, Polo Paraisópolis).
+
+A referência normativa do código é [`docs/ESPECIFICACAO.md`](docs/ESPECIFICACAO.md).
+O sistema registra informações fornecidas por pessoas e não faz nenhuma inferência
+clínica, sugestão ou recomendação de conduta (RNF11).
+
+## Estrutura
+
+```
+equilog/
+├── servico/          # API REST (Node.js 20, Express 4, Prisma, PostgreSQL 16)
+├── aplicativo/       # aplicação móvel (Flutter)
+├── dados-de-teste/   # massa padronizada das sessões de avaliação
+├── docs/             # especificação e sequência de trabalho
+└── docker-compose.yml
+```
+
+## Pré-requisitos
+
+- Docker Engine com o plugin Compose (no Windows, dentro do WSL2)
+- Node.js 20 LTS, para executar o Prisma e os testes fora do contêiner
+- Git
+
+## Configuração
+
+1. Copie os modelos de variáveis de ambiente e defina uma senha própria para o
+   banco, a mesma nos dois arquivos:
+
+   ```sh
+   cp .env.example .env
+   cp servico/.env.example servico/.env
+   ```
+
+   Os arquivos `.env` não são versionados.
+
+2. Instale as dependências do serviço (necessário para usar o Prisma no hospedeiro):
+
+   ```sh
+   cd servico
+   npm ci
+   ```
+
+## Execução
+
+Na raiz do repositório:
+
+```sh
+docker compose up -d --build
+```
+
+O contêiner do serviço gera o certificado autoassinado se ele não existir
+(`servico/scripts/gerar-certificado.sh`), aplica as migrações pendentes e sobe:
+
+| Porta | Protocolo | Comportamento |
+|---|---|---|
+| 3443 | HTTPS | API do EquiLog |
+| 3080 | HTTP | responde 426 Upgrade Required a qualquer requisição (RNF02) |
+| 5432 | PostgreSQL | banco de dados |
+
+### Carga inicial
+
+Com o banco no ar, a partir de `servico/`:
+
+```sh
+npx prisma migrate deploy   # aplica as migrações (o contêiner também faz isso)
+npx prisma db seed          # papel, permissao, papel_permissao e tipo_evento
+```
+
+O seed é idempotente. As permissões são derivadas da matriz em
+`servico/src/dominio/matrizPermissoes.js`, que transcreve a seção 4 da
+especificação.
+
+### Verificação do canal cifrado (RNF02)
+
+```sh
+curl -k https://127.0.0.1:3443/saude-servico   # 200 {"situacao":"ativo"}
+curl    http://127.0.0.1:3080/saude-servico    # 426 Upgrade Required
+```
+
+## Banco de dados
+
+O esquema é versionado em `servico/prisma/migrations/`. A migração inicial contém,
+além das tabelas geradas a partir de `schema.prisma`, três acréscimos manuais que
+o Prisma não representa:
+
+- o índice parcial `idx_evento_animal_data`, que sustenta a linha do tempo (RF13);
+- a restrição `CHECK` dos domínios de `tipo_evento`;
+- a restrição `CHECK` dos estados de `lembrete`.
+
+Para alterar o esquema, crie a migração com `npx prisma migrate dev --create-only`,
+revise o SQL gerado e aplique com `npx prisma migrate deploy`.
+
+## Observações sobre o ambiente Windows
+
+Foi usado Docker Engine dentro do WSL2 (distribuição Ubuntu 24.04), sem Docker
+Desktop. Para que as portas do contêiner fiquem acessíveis em `127.0.0.1` no
+Windows e o WSL não desligue por ociosidade, o arquivo `%USERPROFILE%\.wslconfig`
+contém:
+
+```ini
+[wsl2]
+networkingMode=mirrored
+vmIdleTimeout=-1
+
+[general]
+instanceIdleTimeout=-1
+
+[experimental]
+hostAddressLoopback=true
+```
+
+Os comandos do Compose são executados de dentro do WSL, por exemplo:
+
+```powershell
+wsl -d Ubuntu-24.04 --cd /mnt/c/projetos/equilog -- docker compose up -d
+```
+
+Use `127.0.0.1`, e não `localhost`, na `DATABASE_URL` do hospedeiro: `localhost`
+resolve primeiro para IPv6, que não é encaminhado.
+
+## Dependências e alertas conhecidos
+
+`npm audit` aponta alertas em duas ferramentas de desenvolvimento, nenhum no
+código executado pela API:
+
+- `prisma` (CLI), via `deepmerge-ts`: o caminho afetado só mescla o arquivo de
+  configuração do próprio Prisma e não processa entrada de usuário;
+- `jest` e suas dependências: executados apenas na suíte de testes.
+
+## Versões
+
+| Componente | Versão |
+|---|---|
+| Node.js | 20.20.2 |
+| Express | 4.22.3 |
+| PostgreSQL | 16.15 (imagem oficial `postgres:16`) |
+| Prisma e @prisma/client | 6.19.3 |
+| Jest | 30.5.2 |
