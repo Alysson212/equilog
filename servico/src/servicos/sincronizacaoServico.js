@@ -39,25 +39,30 @@ function resultado(id, situacao, versaoServidor = null, extras = {}) {
   return { id: id ?? null, situacao, versaoServidor, ...extras };
 }
 
+// Toda recusa de item vai para a trilha de auditoria (RNF04), com o motivo.
+// Negacao de permissao usa a acao acesso_negado, como o middleware autorizar;
+// dados invalidos usam sincronizacao_recusada.
 async function recusar(contexto, item, motivo, extras = {}) {
+  const id = typeof item?.id === "string" ? item.id : null;
+  const animalId = typeof item?.animalId === "string" ? item.animalId : null;
   await auditoria.registrar({
     usuarioId: contexto.usuarioId,
-    acao: "acesso_negado",
+    acao: motivo === "dados_invalidos" ? "sincronizacao_recusada" : "acesso_negado",
     entidade: "sincronizacao",
-    entidadeId: item.animalId ?? item.id ?? null,
+    entidadeId: animalId ?? id,
     motivo,
     enderecoIp: contexto.enderecoIp,
   });
-  return resultado(item.id, "recusado", null, { motivo, ...extras });
+  return resultado(id, "recusado", null, { motivo, ...extras });
 }
 
 async function sincronizarItem(contexto, bruto) {
   if (bruto === null || typeof bruto !== "object" || Array.isArray(bruto)) {
-    return resultado(null, "recusado", null, { motivo: "dados_invalidos" });
+    return recusar(contexto, null, "dados_invalidos");
   }
   const { valores: envelope, erros } = validarObjeto(bruto, REGRAS_ENVELOPE);
   if (erros.length > 0) {
-    return resultado(typeof bruto.id === "string" ? bruto.id : null, "recusado", null, { motivo: "dados_invalidos", campos: erros });
+    return recusar(contexto, bruto, "dados_invalidos", { campos: erros });
   }
 
   const vinculo = await buscarVinculoVigente(contexto.usuarioId, envelope.animalId, new Date());
@@ -78,7 +83,7 @@ async function sincronizarItem(contexto, bruto) {
     return resultado(envelope.id, "sincronizado", evento.versao);
   } catch (erro) {
     if (erro instanceof ErroAplicacao && erro.status === 422) {
-      return resultado(envelope.id, "recusado", null, { motivo: "dados_invalidos", campos: erro.campos });
+      return recusar(contexto, envelope, "dados_invalidos", { campos: erro.campos });
     }
     throw erro;
   }
