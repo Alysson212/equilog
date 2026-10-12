@@ -120,6 +120,46 @@ usuário, animal e papel vigente (seção 4 da especificação).
 | GET | `/lembretes` | Listar lembretes do usuário | RF18 |
 | PATCH | `/lembretes/{id}` | Alterar estado do lembrete | RF19 |
 | GET | `/animais/{id}/auditoria` | Consultar trilha de auditoria | RF23 |
+| GET | `/animais/{id}/exportacao` | Exportar histórico em PDF | RF22 |
+| GET | `/animais/{id}/acessos` | Listar vínculos do animal (proprietário) | RF06, RF07 |
+| GET | `/anexos/{id}` | Baixar anexo | RF20 |
+| POST | `/sincronizacao/lote` | Enviar lote de eventos pendentes | RF21 |
+
+## Aplicativo móvel
+
+Flutter, Android 9 (API 28) ou superior. A partir de `aplicativo/`:
+
+```sh
+# o app confia no certificado de desenvolvimento somente se ele estiver empacotado
+cp ../servico/certs/servidor.crt assets/certificados/servidor.crt
+
+flutter test                 # unidade e sincronização (CT09 a CT11) contra o servidor no ar
+flutter build apk --release  # build/app/outputs/flutter-apk/app-release.apk
+```
+
+O endereço padrão do serviço é `https://10.0.2.2:3443`, que é a máquina
+hospedeira vista pelo emulador Android. Em aparelho físico, compile com
+`--dart-define=API_URL=https://<ip-da-maquina>:3443`.
+
+Os testes de sincronização usam o serviço real em `https://127.0.0.1:3443`
+(variável `EQUILOG_API_URL`) e criam usuários de teste na base de desenvolvimento.
+A única coisa simulada é a falta de rede no aparelho.
+
+## Massa de teste e CT12
+
+A partir da raiz do repositório, com o serviço no ar:
+
+```sh
+node dados-de-teste/reinicializar.js --confirmar  # estado padronizado das sessões (seção 8)
+node dados-de-teste/carregar-ct12.js               # +500 eventos em "Estrela do Sul"
+node dados-de-teste/medir-ct12.js                  # mede a linha do tempo (RNF05)
+```
+
+`reinicializar.js` **apaga todos os dados de uso** da base local e cria 2 animais,
+30 eventos nos quatro domínios e um usuário por papel
+(`proprietario@`, `veterinario@`, `treinador@` e `manejo@sessao.equilog`), com a
+senha da variável `SENHA_SESSAO` ou a padrão do script. Os scripts recusam
+bancos que não sejam locais.
 
 ## Banco de dados
 
@@ -183,5 +223,12 @@ código executado pela API:
 | bcrypt | 6.0.0 |
 | jsonwebtoken | 9.0.3 |
 | multer | 2.4.0 |
+| pdfkit | 0.20.2 |
+| Flutter / Dart | 3.47.7 / 3.13.5 |
+| sqflite | 2.4.4+1 |
+| http | 1.6.0 |
+| flutter_secure_storage | 11.2.0 |
+| flutter_local_notifications | 22.3.2 |
+| connectivity_plus | 7.3.2 |
 | Jest | 30.5.2 |
 | supertest | 7.3.1 |
