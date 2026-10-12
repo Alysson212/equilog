@@ -43,6 +43,13 @@ const _rotulosDetalhe = {
   'penalidade': 'Penalidade',
 };
 
+// Datas em dd/mm/aaaa e decimais com virgula
+String _valor(String campo, Object? valor) {
+  if (campo == 'dataRetorno') return exibirDataIso(valor as String);
+  if (valor is double) return valor.toString().replaceAll('.', ',');
+  return '$valor';
+}
+
 class CartaoEvento extends StatelessWidget {
   final ItemLinhaDoTempo item;
   const CartaoEvento({super.key, required this.item});
@@ -52,7 +59,7 @@ class CartaoEvento extends StatelessWidget {
     final cor = coresDominio[item.dominio]!;
     final detalhes = item.detalhe.entries
         .where((e) => e.value != null && e.value.toString().isNotEmpty)
-        .map((e) => '${_rotulosDetalhe[e.key] ?? e.key}: ${e.key == 'dataRetorno' ? exibirDataIso(e.value as String) : e.value}')
+        .map((e) => '${_rotulosDetalhe[e.key] ?? e.key}: ${_valor(e.key, e.value)}')
         .join('  ·  ');
 
     return Card(
