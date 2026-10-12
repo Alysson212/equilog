@@ -28,11 +28,15 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@banco:5432/${POSTGRES_DB}?schema=public
       PORTA_HTTPS: 3443
       PORTA_HTTP: 3080
+      JWT_SEGREDO_ACESSO: ${JWT_SEGREDO_ACESSO}
+      JWT_SEGREDO_RENOVACAO: ${JWT_SEGREDO_RENOVACAO}
+      DIRETORIO_ANEXOS: armazenamento/anexos
     ports:
       - "${PORTA_HTTPS:-3443}:3443"
       - "${PORTA_HTTP:-3080}:3080"
     volumes:
       - ./servico/certs:/app/certs
+      - ./servico/armazenamento:/app/armazenamento
 
 volumes:
   dados-banco:
