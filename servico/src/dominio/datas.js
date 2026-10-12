@@ -53,4 +53,14 @@ function formatarDataHora(instante) {
   return `${partes.year}-${partes.month}-${partes.day}T${partes.hour}:${partes.minute}:${partes.second}${deslocamento}`;
 }
 
-module.exports = { hoje, hojeComoData, paraDataSemHora, formatarData, formatarDataHora };
+// Primeiro e ultimo instante de um dia (AAAA-MM-DD) no fuso configurado,
+// usados nos filtros de periodo da linha do tempo
+function limitesDoDia(textoData) {
+  const meiaNoiteUtc = new Date(`${textoData}T00:00:00.000Z`);
+  const deslocamento = formatarDataHora(meiaNoiteUtc).slice(-6);
+  const inicio = new Date(`${textoData}T00:00:00.000${deslocamento}`);
+  const fim = new Date(inicio.getTime() + 24 * 60 * 60 * 1000 - 1);
+  return { inicio, fim };
+}
+
+module.exports = { hoje, hojeComoData, paraDataSemHora, formatarData, formatarDataHora, limitesDoDia };
