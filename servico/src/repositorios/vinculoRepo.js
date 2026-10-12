@@ -63,6 +63,14 @@ function desativar(id, db = prisma) {
   return db.vinculoAcesso.update({ where: { id }, data: { ativo: false } });
 }
 
+function listarDoAnimal(animalId, db = prisma) {
+  return db.vinculoAcesso.findMany({
+    where: { animalId },
+    include: { papel: true, usuario: true },
+    orderBy: [{ ativo: "desc" }, { dataInicio: "desc" }, { id: "asc" }],
+  });
+}
+
 function idsDoAnimal(animalId, db = prisma) {
   return db.vinculoAcesso.findMany({ where: { animalId }, select: { id: true } });
 }
@@ -74,5 +82,6 @@ module.exports = {
   buscarPorId,
   criar,
   desativar,
+  listarDoAnimal,
   idsDoAnimal,
 };

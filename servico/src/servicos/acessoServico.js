@@ -100,4 +100,17 @@ async function revogar(contexto, vinculo) {
   });
 }
 
-module.exports = { conceder, revogar };
+// Vinculos do animal, para a tela de concessao e revogacao (restrita ao
+// proprietario). vigente indica se o vinculo da acesso na data corrente.
+async function listar(animalId) {
+  const vinculos = await vinculoRepo.listarDoAnimal(animalId);
+  const dia = hoje();
+  return vinculos.map((vinculo) => {
+    const representacao = paraRepresentacao(vinculo);
+    representacao.vigente =
+      vinculo.ativo && representacao.dataInicio <= dia && (representacao.dataFim === null || representacao.dataFim >= dia);
+    return representacao;
+  });
+}
+
+module.exports = { conceder, revogar, listar };

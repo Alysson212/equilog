@@ -8,6 +8,7 @@ const { autorizar } = require("../middlewares/autorizacao");
 const animalServico = require("../servicos/animalServico");
 const acessoServico = require("../servicos/acessoServico");
 const trilhaAuditoriaServico = require("../servicos/trilhaAuditoriaServico");
+const exportacaoServico = require("../servicos/exportacaoServico");
 const rotasEventosDoAnimal = require("./eventosDoAnimal");
 
 const rotas = express.Router();
@@ -52,6 +53,25 @@ rotas.post(
   assincrono(async (req, res) => {
     const vinculo = await acessoServico.conceder(req.contextoAuditoria, req.params.animalId, req.body);
     res.status(201).location(`/acessos/${vinculo.id}`).json(vinculo);
+  }),
+);
+
+// Vinculos do animal, para a tela de acessos (restrito ao proprietario)
+rotas.get(
+  "/:animalId/acessos",
+  autorizar("ler", "acesso"),
+  assincrono(async (req, res) => {
+    res.status(200).json({ itens: await acessoServico.listar(req.params.animalId) });
+  }),
+);
+
+// RF22: exportacao do historico em PDF
+rotas.get(
+  "/:animalId/exportacao",
+  autorizar("ler", "exportacao"),
+  assincrono(async (req, res) => {
+    const { pdf, nomeArquivo } = await exportacaoServico.exportar(req.contextoAuditoria, req.vinculo, req.params.animalId);
+    res.status(200).type("application/pdf").attachment(nomeArquivo).send(pdf);
   }),
 );
 

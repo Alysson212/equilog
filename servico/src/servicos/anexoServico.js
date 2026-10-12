@@ -9,7 +9,7 @@ const { emTransacao } = require("../repositorios/prisma");
 const auditoria = require("./auditoriaServico");
 const { configuracao } = require("./configuracao");
 const { identificarTipo } = require("../dominio/tiposArquivo");
-const { falhaDeValidacao } = require("../dominio/erros");
+const { falhaDeValidacao, naoEncontrado } = require("../dominio/erros");
 
 const TIPO_NAO_ACEITO = {
   campo: "arquivo",
@@ -70,4 +70,18 @@ async function anexar(contexto, evento, arquivo) {
   }
 }
 
-module.exports = { anexar };
+// Localiza o arquivo de um anexo ja autorizado. O caminho gravado e relativo e
+// conferido para nao sair do diretorio de anexos.
+async function localizar(anexo) {
+  const raiz = path.resolve(configuracao.diretorioAnexos);
+  const caminhoAbsoluto = path.resolve(raiz, anexo.caminho);
+  if (!caminhoAbsoluto.startsWith(raiz + path.sep)) throw naoEncontrado("Arquivo não encontrado.");
+  try {
+    await fs.access(caminhoAbsoluto);
+  } catch {
+    throw naoEncontrado("Arquivo não encontrado.");
+  }
+  return { caminhoAbsoluto, mimeType: anexo.mimeType ?? "application/octet-stream", nomeArquivo: anexo.nomeArquivo };
+}
+
+module.exports = { anexar, localizar };
