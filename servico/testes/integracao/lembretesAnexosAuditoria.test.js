@@ -9,6 +9,7 @@ const {
   montarCenario,
   criarUsuario,
   criarAnimal,
+  conceder,
   novoEvento,
   registrarEvento,
   registrosDeAuditoria,
@@ -48,7 +49,7 @@ describe("CT15 - lembrete marcado como cumprido (RF19)", () => {
 });
 
 describe("listagem de lembretes (RF18)", () => {
-  test("cada papel ve os lembretes dos seus animais; manejo nao ve o evento de saude de origem", async () => {
+  test("cada papel ve os lembretes dos seus animais cujo evento de origem pode ler", async () => {
     const { proprietario, veterinario, manejo, lembreteId, evento } = await cenarioComLembrete();
 
     const doVet = await api(veterinario.token).get("/lembretes");
@@ -65,12 +66,36 @@ describe("listagem de lembretes (RF18)", () => {
     ]);
 
     const doDono = await api(proprietario.token).get("/lembretes");
-    expect(doDono.body.itens[0].evento).not.toBeNull();
+    expect(doDono.body.itens.map((l) => l.id)).toEqual([lembreteId]);
+  });
+
+  test("lembrete herda a visibilidade do evento: manejo nao ve lembrete de saude, nem em contagem", async () => {
+    const { manejo, lembreteId } = await cenarioComLembrete();
+
+    for (const filtro of ["", "?status=pendente"]) {
+      const resposta = await api(manejo.token).get(`/lembretes${filtro}`);
+      expect(resposta.status).toBe(200);
+      expect(resposta.body).toEqual({ itens: [] });
+    }
+
+    // nem pela alteracao direta: a recusa vem da leitura do dominio de origem
+    const alteracao = await api(manejo.token).patch(`/lembretes/${lembreteId}`).send({ status: "cumprido" });
+    expect(alteracao.status).toBe(403);
+    expect(await registrosDeAuditoria({ usuarioId: manejo.id, motivo: "papel_insuficiente", entidade: "saude" })).toHaveLength(1);
+    expect((await prisma.lembrete.findUnique({ where: { id: lembreteId } })).status).toBe("pendente");
+  });
+
+  test("lembrete de outro animal em que o manejo tem vinculo continua oculto se for de saude", async () => {
+    const { proprietario, veterinario, manejo, animal } = await cenarioComLembrete();
+    const segundo = await criarAnimal(proprietario, { nome: "Segundo" });
+    await conceder(proprietario, segundo.id, veterinario, "veterinario");
+    await conceder(proprietario, segundo.id, manejo, "manejo");
+    await registrarEvento(veterinario, segundo.id, novoEvento("saude", { detalhe: { dataRetorno: "2026-11-01" } }));
 
     const doManejo = await api(manejo.token).get("/lembretes");
-    expect(doManejo.body.itens).toHaveLength(1);
-    expect(doManejo.body.itens[0].evento).toBeNull();
-    expect(JSON.stringify(doManejo.body)).not.toMatch(/Vacina|vacinacao/);
+    expect(doManejo.body.itens).toEqual([]);
+    const doVet = await api(veterinario.token).get("/lembretes");
+    expect(doVet.body.itens.map((l) => l.animal.id).sort()).toEqual([animal.id, segundo.id].sort());
   });
 
   test("usuario sem vinculo nao ve lembretes de outros animais", async () => {
@@ -110,11 +135,29 @@ describe("alteracao de estado do lembrete (RF19)", () => {
     expect(pendente.body.erro).toBe("Marque o lembrete como cumprido, adiado ou cancelado.");
   });
 
-  test("responsavel pelo manejo apenas le lembretes: alterar responde 403", async () => {
-    const { manejo, lembreteId } = await cenarioComLembrete();
-    const resposta = await api(manejo.token).patch(`/lembretes/${lembreteId}`).send({ status: "cumprido" });
-    expect(resposta.status).toBe(403);
-    expect(await registrosDeAuditoria({ usuarioId: manejo.id, motivo: "papel_insuficiente", entidade: "lembrete" })).toHaveLength(1);
+  test("lembrete cumprido nao e alterado por edicao nem por exclusao posterior do evento", async () => {
+    const { proprietario, veterinario, evento, lembreteId } = await cenarioComLembrete();
+    await api(proprietario.token).patch(`/lembretes/${lembreteId}`).send({ status: "cumprido" });
+
+    await api(veterinario.token).patch(`/eventos/${evento.id}`).send({ detalhe: { dataRetorno: null } });
+    let lembrete = await prisma.lembrete.findUnique({ where: { id: lembreteId } });
+    expect(lembrete.status).toBe("cumprido");
+    expect(lembrete.dataPrevista.toISOString().slice(0, 10)).toBe("2026-09-14");
+
+    await api(proprietario.token).delete(`/eventos/${evento.id}`);
+    lembrete = await prisma.lembrete.findUnique({ where: { id: lembreteId } });
+    expect(lembrete.status).toBe("cumprido");
+    expect(await registrosDeAuditoria({ entidadeId: lembreteId, acao: "lembrete_cancelado" })).toHaveLength(0);
+  });
+
+  test("lembrete adiado esta em aberto: edicao da data de retorno o reajusta", async () => {
+    const { treinador, veterinario, evento, lembreteId } = await cenarioComLembrete();
+    await api(treinador.token).patch(`/lembretes/${lembreteId}`).send({ status: "adiado", dataPrevista: "2026-09-20" });
+
+    await api(veterinario.token).patch(`/eventos/${evento.id}`).send({ detalhe: { dataRetorno: "2026-10-05" } });
+    const lembrete = await prisma.lembrete.findUnique({ where: { id: lembreteId } });
+    expect(lembrete.dataPrevista.toISOString().slice(0, 10)).toBe("2026-10-05");
+    expect(lembrete.status).toBe("pendente");
   });
 
   test("lembrete inexistente responde 404", async () => {

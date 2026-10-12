@@ -2,30 +2,30 @@
 // por uma pessoa em um evento de saude (RF17, em eventoServico). Aqui ele e
 // listado para agendamento da notificacao no dispositivo e tem seu estado
 // alterado. Nenhuma data e calculada, sugerida ou proposta (RNF11).
+//
+// Visibilidade: o lembrete herda a do evento que o originou. Quem nao le o
+// dominio do evento de origem nao ve o lembrete, nem em contagem (UC08).
 
 const lembreteRepo = require("../repositorios/lembreteRepo");
 const vinculoRepo = require("../repositorios/vinculoRepo");
 const { emTransacao } = require("../repositorios/prisma");
 const auditoria = require("./auditoriaServico");
-const { papelPode } = require("../dominio/matrizPermissoes");
+const { papelPode, dominiosLegiveis } = require("../dominio/matrizPermissoes");
 const { falhaDeValidacao } = require("../dominio/erros");
 const { formatarData, paraDataSemHora } = require("../dominio/datas");
 const { validarObjeto, exigirObjeto, lancarSeHouverErros } = require("../dominio/validacao");
 
 const ESTADOS = ["pendente", "cumprido", "adiado", "cancelado"];
 
-// O lembrete deriva de um evento de saude. O papel que nao le saude (manejo)
-// ve o lembrete e a data, mas nao o evento que o originou.
 function paraRepresentacao(lembrete, papel) {
   const evento = lembrete.evento;
-  const podeVerEvento = papelPode(papel, "ler", evento.tipoEvento.dominio);
   return {
     id: lembrete.id,
     animal: { id: lembrete.animal.id, nome: lembrete.animal.nome },
     dataPrevista: formatarData(lembrete.dataPrevista),
     status: lembrete.status,
     papel,
-    evento: podeVerEvento ? { id: evento.id, titulo: evento.titulo, tipoEvento: evento.tipoEvento.nome } : null,
+    evento: { id: evento.id, titulo: evento.titulo, tipoEvento: evento.tipoEvento.nome },
   };
 }
 
@@ -38,13 +38,22 @@ async function listar(usuarioId, consulta) {
     status = consulta.status;
   }
 
+  // animais agrupados por papel, cada grupo com os dominios que o papel le
   const vinculos = await vinculoRepo.listarVigentesDoUsuario(usuarioId);
-  const papelPorAnimal = new Map(
-    vinculos.filter((v) => papelPode(v.papel.nome, "ler", "lembrete")).map((v) => [v.animalId, v.papel.nome]),
-  );
-  if (papelPorAnimal.size === 0) return [];
+  const papelPorAnimal = new Map();
+  const animaisPorPapel = new Map();
+  for (const vinculo of vinculos) {
+    const papel = vinculo.papel.nome;
+    if (!papelPode(papel, "ler", "lembrete")) continue;
+    papelPorAnimal.set(vinculo.animalId, papel);
+    animaisPorPapel.set(papel, [...(animaisPorPapel.get(papel) ?? []), vinculo.animalId]);
+  }
+  const escopos = [...animaisPorPapel.entries()]
+    .map(([papel, animalIds]) => ({ animalIds, dominios: dominiosLegiveis(papel) }))
+    .filter((escopo) => escopo.dominios.length > 0);
+  if (escopos.length === 0) return [];
 
-  const lembretes = await lembreteRepo.listarDosAnimais([...papelPorAnimal.keys()], { status });
+  const lembretes = await lembreteRepo.listarVisiveis(escopos, { status });
   return lembretes.map((l) => paraRepresentacao(l, papelPorAnimal.get(l.animalId)));
 }
 

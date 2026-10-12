@@ -28,12 +28,16 @@ function atualizar(id, dados, db = prisma) {
   return db.lembrete.update({ where: { id }, data: dados });
 }
 
-// Lembretes de eventos nao excluidos dos animais informados
-function listarDosAnimais(animalIds, { status }, db = prisma) {
+// Lembretes de eventos nao excluidos. escopos: lista de { animalIds, dominios },
+// um por papel; o filtro pelo dominio do evento de origem integra a consulta,
+// de modo que lembrete de dominio nao legivel nao e recuperado nem contado.
+function listarVisiveis(escopos, { status }, db = prisma) {
   return db.lembrete.findMany({
     where: {
-      animalId: { in: animalIds },
-      evento: { excluidoEm: null },
+      OR: escopos.map(({ animalIds, dominios }) => ({
+        animalId: { in: animalIds },
+        evento: { excluidoEm: null, tipoEvento: { dominio: { in: dominios } } },
+      })),
       ...(status ? { status } : {}),
     },
     orderBy: [{ dataPrevista: "asc" }, { id: "asc" }],
@@ -52,6 +56,6 @@ module.exports = {
   primeiroDoEvento,
   emAbertoDoEvento,
   atualizar,
-  listarDosAnimais,
+  listarVisiveis,
   idsDoAnimal,
 };

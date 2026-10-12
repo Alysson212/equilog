@@ -26,9 +26,11 @@ async function buscarLembreteAtivo(req) {
   return lembrete && !lembrete.evento.excluidoEm ? lembrete : null;
 }
 
+// Alterar exige E na linha de lembretes e leitura do dominio do evento de origem
 rotas.patch(
   "/:lembreteId",
   carregarRecurso(buscarLembreteAtivo),
+  autorizar("ler", (req) => req.recurso.evento.tipoEvento.dominio),
   autorizar("editar", "lembrete"),
   assincrono(async (req, res) => {
     res.status(200).json(await lembreteServico.alterarEstado(req.contextoAuditoria, req.vinculo, req.recurso, req.body));
