@@ -1,0 +1,2 @@
+Copie aqui o certificado do servico de desenvolvimento: servico/certs/servidor.crt.
+O arquivo .crt nao e versionado.

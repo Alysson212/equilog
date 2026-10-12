@@ -24,3 +24,7 @@ aplicativo/.flutter-plugins-dependencies
 Thumbs.db
 .vscode/
 .idea/
+
+# certificado de desenvolvimento copiado para o aplicativo
+aplicativo/assets/certificados/*.crt
+
