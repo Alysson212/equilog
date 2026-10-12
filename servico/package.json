@@ -23,14 +23,25 @@
     "testEnvironment": "node",
     "roots": [
       "<rootDir>/testes"
+    ],
+    "globalSetup": "<rootDir>/testes/configuracao/preparacaoGlobal.js",
+    "setupFiles": [
+      "<rootDir>/testes/configuracao/ambiente.js"
+    ],
+    "testTimeout": 30000,
+    "collectCoverageFrom": [
+      "src/**/*.js"
     ]
   },
   "dependencies": {
     "@prisma/client": "6.19.3",
-    "express": "4.22.3"
+    "bcrypt": "6.0.0",
+    "express": "4.22.3",
+    "jsonwebtoken": "9.0.3"
   },
   "devDependencies": {
     "jest": "30.5.2",
-    "prisma": "6.19.3"
+    "prisma": "6.19.3",
+    "supertest": "7.3.1"
   }
 }

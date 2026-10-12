@@ -8,13 +8,48 @@ const http = require("node:http");
 const https = require("node:https");
 const express = require("express");
 
+const { contextoAuditoria } = require("./middlewares/auditoria");
+const { ErroAplicacao } = require("./dominio/erros");
+const rotasAutenticacao = require("./rotas/autenticacao");
+const rotasUsuarios = require("./rotas/usuarios");
+const rotasAnimais = require("./rotas/animais");
+const rotasAcessos = require("./rotas/acessos");
+
 const app = express();
 
 app.disable("x-powered-by");
 app.use(express.json({ limit: "1mb" }));
+app.use(contextoAuditoria);
 
 app.get("/saude-servico", (req, res) => {
   res.status(200).json({ situacao: "ativo" });
+});
+
+app.use("/auth", rotasAutenticacao);
+app.use("/usuarios", rotasUsuarios);
+app.use("/animais", rotasAnimais);
+app.use("/acessos", rotasAcessos);
+
+app.use((req, res) => {
+  res.status(404).json({ erro: "Endereço não encontrado." });
+});
+
+// Tratador de erros: mensagens em linguagem comum, sem detalhe interno (RNF08)
+// eslint-disable-next-line no-unused-vars
+app.use((erro, req, res, next) => {
+  if (erro instanceof ErroAplicacao) {
+    const corpo = { erro: erro.message };
+    if (erro.campos) corpo.campos = erro.campos;
+    return res.status(erro.status).json(corpo);
+  }
+  if (erro.type === "entity.parse.failed") {
+    return res.status(400).json({ erro: "Não foi possível ler os dados enviados." });
+  }
+  if (erro.type === "entity.too.large") {
+    return res.status(400).json({ erro: "Os dados enviados são grandes demais." });
+  }
+  console.error(erro);
+  return res.status(500).json({ erro: "Ocorreu um erro inesperado. Tente novamente em instantes." });
 });
 
 function criarListenerNaoCifrado() {
