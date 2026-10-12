@@ -47,17 +47,20 @@ class NotificacoesServico {
     return tz.TZDateTime(tz.local, partes[0], partes[1], partes[2], horaNotificacao);
   }
 
-  // Reflete no sistema a lista atual de lembretes: agenda os em aberto com
-  // data futura e cancela todos os demais conhecidos
+  // Reflete no sistema a lista atual de lembretes: cancela a notificacao do
+  // lembrete que deixou de estar em aberto (cumprido ou cancelado), agenda os
+  // em aberto com data futura e nao mexe nos em aberto ja vencidos, cuja
+  // notificacao pode estar sendo exibida.
   Future<void> sincronizarAgendamentos(List<Lembrete> lembretes) async {
     final agora = tz.TZDateTime.now(tz.local);
     for (final lembrete in lembretes) {
       final id = idDaNotificacao(lembrete.id);
       final instante = instanteDaNotificacao(lembrete.dataPrevista);
-      if (!lembrete.emAberto || instante.isBefore(agora)) {
+      if (!lembrete.emAberto) {
         await _plugin.cancel(id: id);
         continue;
       }
+      if (instante.isBefore(agora)) continue;
       await _plugin.zonedSchedule(
         id: id,
         title: 'Lembrete: ${lembrete.animalNome}',
