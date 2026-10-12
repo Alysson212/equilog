@@ -7,6 +7,7 @@ const { autenticar } = require("../middlewares/autenticacao");
 const { autorizar } = require("../middlewares/autorizacao");
 const animalServico = require("../servicos/animalServico");
 const acessoServico = require("../servicos/acessoServico");
+const trilhaAuditoriaServico = require("../servicos/trilhaAuditoriaServico");
 const rotasEventosDoAnimal = require("./eventosDoAnimal");
 
 const rotas = express.Router();
@@ -51,6 +52,15 @@ rotas.post(
   assincrono(async (req, res) => {
     const vinculo = await acessoServico.conceder(req.contextoAuditoria, req.params.animalId, req.body);
     res.status(201).location(`/acessos/${vinculo.id}`).json(vinculo);
+  }),
+);
+
+// RF23: trilha de auditoria do animal, apenas o proprietario
+rotas.get(
+  "/:animalId/auditoria",
+  autorizar("ler", "auditoria"),
+  assincrono(async (req, res) => {
+    res.status(200).json(await trilhaAuditoriaServico.consultarDoAnimal(req.params.animalId, req.query));
   }),
 );
 

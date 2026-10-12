@@ -15,6 +15,7 @@ const rotasUsuarios = require("./rotas/usuarios");
 const rotasAnimais = require("./rotas/animais");
 const rotasAcessos = require("./rotas/acessos");
 const rotasEventos = require("./rotas/eventos");
+const rotasLembretes = require("./rotas/lembretes");
 
 const app = express();
 
@@ -31,6 +32,7 @@ app.use("/usuarios", rotasUsuarios);
 app.use("/animais", rotasAnimais);
 app.use("/acessos", rotasAcessos);
 app.use("/eventos", rotasEventos);
+app.use("/lembretes", rotasLembretes);
 
 app.use((req, res) => {
   res.status(404).json({ erro: "Endereço não encontrado." });

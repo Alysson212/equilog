@@ -82,6 +82,45 @@ curl -k https://127.0.0.1:3443/saude-servico   # 200 {"situacao":"ativo"}
 curl    http://127.0.0.1:3080/saude-servico    # 426 Upgrade Required
 ```
 
+## Testes do serviço
+
+A partir de `servico/`, com o banco no ar:
+
+```sh
+npm test                 # unidade e integração
+npm run test:cobertura   # idem, com relatório de cobertura em coverage/
+```
+
+A suíte usa um banco exclusivo (`DATABASE_URL_TESTE`), que precisa ter nome
+terminado em `_teste`; outro nome é recusado, para que a base de desenvolvimento
+nunca seja apagada por engano. Antes da suíte, as migrações e o seed são aplicados
+nesse banco; antes de cada teste, os dados de uso são apagados.
+
+## Endpoints
+
+Todos sob HTTPS. Autorização resolvida no servidor a cada requisição, pela tripla
+usuário, animal e papel vigente (seção 4 da especificação).
+
+| Método | Caminho | Finalidade | RF |
+|---|---|---|---|
+| POST | `/auth/login` | Autenticar e emitir tokens | RF02 |
+| POST | `/auth/refresh` | Renovar token de acesso | RF03 |
+| POST | `/usuarios` | Cadastrar usuário | RF01 |
+| GET | `/animais` | Listar animais com vínculo vigente | RF08 |
+| POST | `/animais` | Cadastrar animal | RF04 |
+| GET | `/animais/{id}` | Consultar animal | RF08 |
+| PATCH | `/animais/{id}` | Editar ou inativar animal | RF05 |
+| GET | `/animais/{id}/eventos` | Linha do tempo com filtros e paginação | RF13, RF14 |
+| POST | `/animais/{id}/eventos` | Registrar evento | RF09 a RF12, RF17 |
+| PATCH | `/eventos/{id}` | Editar evento próprio | RF15 |
+| DELETE | `/eventos/{id}` | Exclusão lógica | RF16 |
+| POST | `/eventos/{id}/anexos` | Anexar arquivo (campo `arquivo`, até 10 MB) | RF20 |
+| POST | `/animais/{id}/acessos` | Conceder vínculo | RF06 |
+| DELETE | `/acessos/{id}` | Revogar vínculo | RF07 |
+| GET | `/lembretes` | Listar lembretes do usuário | RF18 |
+| PATCH | `/lembretes/{id}` | Alterar estado do lembrete | RF19 |
+| GET | `/animais/{id}/auditoria` | Consultar trilha de auditoria | RF23 |
+
 ## Banco de dados
 
 O esquema é versionado em `servico/prisma/migrations/`. Além das tabelas geradas a
@@ -141,4 +180,8 @@ código executado pela API:
 | Express | 4.22.3 |
 | PostgreSQL | 16.15 (imagem oficial `postgres:16`) |
 | Prisma e @prisma/client | 6.19.3 |
+| bcrypt | 6.0.0 |
+| jsonwebtoken | 9.0.3 |
+| multer | 2.4.0 |
 | Jest | 30.5.2 |
+| supertest | 7.3.1 |
