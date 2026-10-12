@@ -5,12 +5,15 @@ const { randomUUID } = require("node:crypto");
 const request = require("supertest");
 const { app } = require("../../src/app");
 const { prisma } = require("../../src/repositorios/prisma");
+const { confirmarConexaoDeTeste } = require("../configuracao/bancoDeTeste");
 
 const SENHA_PADRAO = "senha-segura-123";
 let sequencia = 0;
 
-// Apaga os dados de uso, preservando a carga do seed
+// Apaga os dados de uso, preservando a carga do seed. Antes, confirma pela
+// conexao que o banco e o equilog_teste.
 async function limparBase() {
+  await confirmarConexaoDeTeste(prisma);
   await prisma.$executeRawUnsafe(`
     TRUNCATE log_auditoria, anexo, lembrete, evento_historico, evento_saude,
              evento_manejo, evento_treinamento, evento_competicao, evento,
