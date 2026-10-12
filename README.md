@@ -84,13 +84,14 @@ curl    http://127.0.0.1:3080/saude-servico    # 426 Upgrade Required
 
 ## Banco de dados
 
-O esquema é versionado em `servico/prisma/migrations/`. A migração inicial contém,
-além das tabelas geradas a partir de `schema.prisma`, três acréscimos manuais que
-o Prisma não representa:
+O esquema é versionado em `servico/prisma/migrations/`. Além das tabelas geradas a
+partir de `schema.prisma`, as migrações contêm acréscimos manuais que o Prisma não
+representa:
 
 - o índice parcial `idx_evento_animal_data`, que sustenta a linha do tempo (RF13);
 - a restrição `CHECK` dos domínios de `tipo_evento`;
-- a restrição `CHECK` dos estados de `lembrete`.
+- a restrição `CHECK` dos estados de `lembrete`;
+- a restrição `CHECK` do sexo do animal (`M`, `F` ou `C`).
 
 Para alterar o esquema, crie a migração com `npx prisma migrate dev --create-only`,
 revise o SQL gerado e aplique com `npx prisma migrate deploy`.

@@ -76,8 +76,9 @@ Carga inicial: `proprietario`, `veterinario`, `treinador`, `manejo`.
 **papel_permissao**: `papel_id` FK, `permissao_id` FK, PK composta.
 
 **animal**: `id` UUID PK, `nome` VARCHAR(120) NN, `registro_associacao` VARCHAR(40),
-`data_nascimento` DATE, `sexo` CHAR(1) NN, `pelagem` VARCHAR(60),
-`proprietario_id` UUID FK → usuario NN, `ativo` BOOLEAN NN.
+`data_nascimento` DATE, `sexo` CHAR(1) NN (`M` macho inteiro, `F` fêmea, `C`
+macho castrado), `pelagem` VARCHAR(60), `proprietario_id` UUID FK → usuario NN,
+`ativo` BOOLEAN NN.
 
 **vinculo_acesso**: `id` UUID PK, `usuario_id` FK NN, `animal_id` FK NN,
 `papel_id` FK NN, `data_inicio` DATE NN, `data_fim` DATE (nulo = indeterminada),
