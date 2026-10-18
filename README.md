@@ -264,15 +264,15 @@ Resultado obtido na validação por clone limpo: **20 testes, todos aprovados**.
 
 O requisito mínimo é Android 9 (API 28). As ferramentas do Android SDK
 normalmente não ficam no PATH, por isso os comandos abaixo usam o caminho completo
-a partir da pasta do SDK (no Windows, `%LOCALAPPDATA%AndroidSdk`; no Linux,
+a partir da pasta do SDK (no Windows, `%LOCALAPPDATA%\Android\Sdk`; no Linux,
 `~/Android/Sdk`; o caminho exato aparece em `flutter doctor -v`).
 
 No PowerShell (Windows):
 
 ```powershell
-$sdk = "$env:LOCALAPPDATAAndroidSdk"
-& "$sdkcmdline-toolslatestinsdkmanager.bat" "platform-tools" "emulator" "platforms/android-36" "system-images/android-28/google_apis/x86_64"
-echo no | & "$sdkcmdline-toolslatestinavdmanager.bat" create avd -n equilog_api28 -k "system-images;android-28;google_apis;x86_64" -d pixel_4
+$sdk = "$env:LOCALAPPDATA\Android\Sdk"
+& "$sdk\cmdline-tools\latest\bin\sdkmanager.bat" "platform-tools" "emulator" "platforms/android-36" "system-images/android-28/google_apis/x86_64"
+echo no | & "$sdk\cmdline-tools\latest\bin\avdmanager.bat" create avd -n equilog_api28 -k "system-images;android-28;google_apis;x86_64" -d pixel_4
 flutter emulators --launch equilog_api28
 ```
 
