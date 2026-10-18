@@ -100,7 +100,11 @@ Versões obtidas no ambiente em que o projeto foi construído e validado
 | Node.js | 20 LTS | migrações, seed, testes do serviço e scripts de massa de teste |
 | Flutter | 3.47.7 (Dart 3.13.5, exigido pelo `pubspec.yaml`) | compilar e testar o aplicativo |
 | JDK | 17 | compilação Android |
-| Android SDK | plataforma 36, imagem de sistema API 28 | compilação e emulador |
+| Android SDK com Command-line Tools | plataforma 36, imagem de sistema API 28 | compilação e emulador |
+
+Antes de compilar o aplicativo, `flutter doctor` não deve apontar pendências nas
+seções Flutter e Android toolchain (as licenças do SDK são aceitas com
+`flutter doctor --android-licenses`).
 
 **Docker no Windows.** O projeto foi desenvolvido com Docker Engine instalado
 dentro do WSL2 (Ubuntu 24.04), sem Docker Desktop. Com Docker Desktop, os comandos
@@ -140,12 +144,14 @@ Todos os comandos partem da raiz do repositório, salvo indicação.
    `servico/certs/` (`servidor.crt` e `servidor.key`, válidos por 365 dias, para
    `localhost`, `127.0.0.1` e `10.0.2.2`), aplica as migrações e começa a atender.
 
-4. Instale as dependências do serviço no hospedeiro e aplique a carga inicial
-   (papéis, permissões e tipos de evento):
+4. Instale as dependências do serviço no hospedeiro, gere o cliente do Prisma e
+   aplique a carga inicial (papéis, permissões e tipos de evento). O `npm ci` não
+   gera o cliente sozinho; sem `prisma generate`, o seed falha:
 
    ```sh
    cd servico
    npm ci
+   npx prisma generate
    npx prisma migrate deploy
    npx prisma db seed
    cd ..
@@ -180,8 +186,9 @@ npm run test:cobertura
 O primeiro roda a suíte de unidade e integração. O segundo roda a mesma suíte e
 grava o relatório de cobertura em `servico/coverage/`.
 
-Resultado obtido na validação por clone limpo (seção 14):
-**RESULTADO_TESTES**
+Resultado obtido na validação por clone limpo (seção 14): **259 testes em 10
+arquivos, todos aprovados**. Cobertura: 93,91% das instruções, 81,33% dos ramos,
+97,7% das funções e 95,99% das linhas.
 
 A suíte usa um banco exclusivo, `equilog_teste` (variável `DATABASE_URL_TESTE` em
 `servico/.env`). Qualquer outro nome de banco é recusado, para que a base de
@@ -251,18 +258,38 @@ Os testes de sincronização (CT09 a CT11) e de operações usam o **serviço re
 Esses testes criam usuários na base de desenvolvimento; depois deles, volte ao
 estado padronizado com o comando da seção 8.
 
-Resultado obtido na validação por clone limpo: **RESULTADO_APP**
+Resultado obtido na validação por clone limpo: **20 testes, todos aprovados**.
 
 ### 9.3 Emulador Android com API 28
 
-O requisito mínimo é Android 9 (API 28). Para criar um emulador com essa versão
-(os comandos ficam em `cmdline-tools/latest/bin` e `emulator/` do Android SDK):
+O requisito mínimo é Android 9 (API 28). As ferramentas do Android SDK
+normalmente não ficam no PATH, por isso os comandos abaixo usam o caminho completo
+a partir da pasta do SDK (no Windows, `%LOCALAPPDATA%AndroidSdk`; no Linux,
+`~/Android/Sdk`; o caminho exato aparece em `flutter doctor -v`).
+
+No PowerShell (Windows):
+
+```powershell
+$sdk = "$env:LOCALAPPDATAAndroidSdk"
+& "$sdkcmdline-toolslatestinsdkmanager.bat" "platform-tools" "emulator" "platforms/android-36" "system-images/android-28/google_apis/x86_64"
+echo no | & "$sdkcmdline-toolslatestinavdmanager.bat" create avd -n equilog_api28 -k "system-images;android-28;google_apis;x86_64" -d pixel_4
+flutter emulators --launch equilog_api28
+```
+
+No Linux ou macOS:
 
 ```sh
-sdkmanager "platform-tools" "emulator" "platforms;android-36" "system-images;android-28;google_apis;x86_64"
-avdmanager create avd -n equilog_api28 -k "system-images;android-28;google_apis;x86_64" -d pixel_4
-emulator -avd equilog_api28
+SDK="$HOME/Android/Sdk"
+"$SDK/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "emulator" "platforms/android-36" "system-images/android-28/google_apis/x86_64"
+echo no | "$SDK/cmdline-tools/latest/bin/avdmanager" create avd -n equilog_api28 -k "system-images;android-28;google_apis;x86_64" -d pixel_4
+flutter emulators --launch equilog_api28
 ```
+
+O `sdkmanager` das Command-line Tools atuais (23.0) identifica pacotes com `/`;
+versões antigas usam `;` (`system-images;android-28;google_apis;x86_64`). O
+`avdmanager` aceita a forma com `;`. O `echo no` responde à pergunta sobre
+perfil de hardware personalizado. Aguarde o emulador terminar de iniciar antes do
+próximo passo (`flutter devices` deve listá-lo).
 
 ### 9.4 Compilar e executar
 
@@ -279,8 +306,14 @@ flutter build apk --release
 ```
 
 O arquivo fica em `aplicativo/build/app/outputs/flutter-apk/app-release.apk` e é
-assinado com a chave de depuração, o que basta para instalar no emulador
-(`adb install -r build/app/outputs/flutter-apk/app-release.apk`).
+assinado com a chave de depuração, o que basta para o emulador. Para instalar esse
+APK no emulador aberto:
+
+```sh
+flutter install --release
+```
+
+Para entrar no aplicativo, use um dos usuários da seção 8.
 
 O endereço padrão do serviço no aplicativo é `https://10.0.2.2:3443`: é assim que o
 emulador Android enxerga a máquina hospedeira. Em aparelho físico na mesma rede,
