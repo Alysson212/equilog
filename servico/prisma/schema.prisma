@@ -13,13 +13,16 @@ datasource db {
 }
 
 model Usuario {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  nome      String   @db.VarChar(120)
-  email     String   @unique @db.VarChar(160)
-  senhaHash String   @map("senha_hash") @db.VarChar(255)
-  telefone  String?  @db.VarChar(20)
-  ativo     Boolean  @default(true)
-  criadoEm  DateTime @default(now()) @map("criado_em") @db.Timestamptz
+  id                    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nome                  String   @db.VarChar(120)
+  email                 String   @unique @db.VarChar(160)
+  senhaHash             String   @map("senha_hash") @db.VarChar(255)
+  // resumo bcrypt do codigo de recuperacao de senha (decisao 9.7); nulo para
+  // contas criadas antes da funcao, ate que a pessoa gere um codigo
+  codigoRecuperacaoHash String?  @map("codigo_recuperacao_hash") @db.VarChar(255)
+  telefone              String?  @db.VarChar(20)
+  ativo                 Boolean  @default(true)
+  criadoEm              DateTime @default(now()) @map("criado_em") @db.Timestamptz
 
   animaisProprios    Animal[]          @relation("ProprietarioAnimal")
   vinculos           VinculoAcesso[]   @relation("UsuarioVinculo")

@@ -121,11 +121,15 @@ describe("cadastro de usuario (RF01, RNF01, RNF12)", () => {
       nome: "Davi",
       email: "davi@teste.equilog",
       telefone: "(35) 99999-0000",
+      codigoRecuperacao: expect.stringMatching(/^[2-9A-HJKMNP-Z]{4}-[2-9A-HJKMNP-Z]{4}-[2-9A-HJKMNP-Z]{4}$/),
     });
 
     const gravado = await prisma.usuario.findUnique({ where: { id: resposta.body.id } });
     expect(gravado.senhaHash).toMatch(/^\$2[ab]\$12\$/);
     expect(gravado.senhaHash).not.toContain(SENHA_PADRAO);
+    // o codigo de recuperacao tambem so existe no banco como resumo bcrypt
+    expect(gravado.codigoRecuperacaoHash).toMatch(/^\$2[ab]\$12\$/);
+    expect(gravado.codigoRecuperacaoHash).not.toContain(resposta.body.codigoRecuperacao);
   });
 
   test("responde 422 com mensagem compreensivel quando falta dado", async () => {
@@ -149,5 +153,104 @@ describe("cadastro de usuario (RF01, RNF01, RNF12)", () => {
     const resposta = await api().post("/usuarios").set("Content-Type", "application/json").send("{nome:");
     expect(resposta.status).toBe(400);
     expect(resposta.body).toEqual({ erro: "Não foi possível ler os dados enviados." });
+  });
+});
+
+describe("recuperacao de senha pelo codigo do cadastro (decisao 9.7)", () => {
+  const NOVA_SENHA = "outra-senha-segura-456";
+
+  async function cadastrar(nome) {
+    const email = `${nome.toLowerCase()}@teste.equilog`;
+    const resposta = await api().post("/usuarios").send({ nome, email, senha: SENHA_PADRAO });
+    return { id: resposta.body.id, email, codigo: resposta.body.codigoRecuperacao };
+  }
+
+  test("com o codigo certo troca a senha, devolve novo codigo e o anterior deixa de valer", async () => {
+    const usuario = await cadastrar("Gil");
+
+    // digitado em minusculas e sem hifens, como a pessoa poderia anotar
+    const digitado = usuario.codigo.toLowerCase().replace(/-/g, " ");
+    const resposta = await api()
+      .post("/auth/recuperar-senha")
+      .send({ email: usuario.email.toUpperCase(), codigoRecuperacao: digitado, novaSenha: NOVA_SENHA });
+
+    expect(resposta.status).toBe(200);
+    expect(Object.keys(resposta.body)).toEqual(["codigoRecuperacao"]);
+    expect(resposta.body.codigoRecuperacao).not.toBe(usuario.codigo);
+
+    expect((await api().post("/auth/login").send({ email: usuario.email, senha: SENHA_PADRAO })).status).toBe(401);
+    expect((await api().post("/auth/login").send({ email: usuario.email, senha: NOVA_SENHA })).status).toBe(200);
+
+    const reuso = await api()
+      .post("/auth/recuperar-senha")
+      .send({ email: usuario.email, codigoRecuperacao: usuario.codigo, novaSenha: "mais-uma-senha-789" });
+    expect(reuso.status).toBe(401);
+
+    const novoCodigo = await api()
+      .post("/auth/recuperar-senha")
+      .send({ email: usuario.email, codigoRecuperacao: resposta.body.codigoRecuperacao, novaSenha: "mais-uma-senha-789" });
+    expect(novoCodigo.status).toBe(200);
+
+    const redefinicoes = await registrosDeAuditoria({ acao: "senha_redefinida" });
+    expect(redefinicoes).toHaveLength(2);
+    expect(redefinicoes[0]).toMatchObject({ usuarioId: usuario.id, entidade: "usuario", entidadeId: usuario.id });
+  });
+
+  test("recusa com a mesma resposta para codigo errado, e-mail inexistente, conta sem codigo e conta inativa", async () => {
+    const certo = await cadastrar("Hugo");
+    const semCodigo = await cadastrar("Iara");
+    await prisma.usuario.update({ where: { id: semCodigo.id }, data: { codigoRecuperacaoHash: null } });
+    const inativo = await cadastrar("Joel");
+    await prisma.usuario.update({ where: { id: inativo.id }, data: { ativo: false } });
+
+    const tentativas = [
+      { email: certo.email, codigoRecuperacao: "AAAA-BBBB-CCCC" },
+      { email: "ninguem@teste.equilog", codigoRecuperacao: certo.codigo },
+      { email: semCodigo.email, codigoRecuperacao: semCodigo.codigo },
+      { email: inativo.email, codigoRecuperacao: inativo.codigo },
+    ];
+    for (const tentativa of tentativas) {
+      const resposta = await api().post("/auth/recuperar-senha").send({ ...tentativa, novaSenha: NOVA_SENHA });
+      expect(resposta.status).toBe(401);
+      expect(resposta.body).toEqual({ erro: "E-mail ou código de recuperação não conferem." });
+    }
+
+    const negacoes = await registrosDeAuditoria({ acao: "recuperacao_negada" });
+    expect(negacoes.map((n) => n.motivo)).toEqual(["codigo_incorreto", "usuario_inexistente", "sem_codigo", "conta_inativa"]);
+    expect(negacoes[1]).toMatchObject({ usuarioId: null, identificadorTentativa: "ninguem@teste.equilog" });
+
+    // nenhuma senha foi alterada
+    expect((await api().post("/auth/login").send({ email: certo.email, senha: SENHA_PADRAO })).status).toBe(200);
+    expect(await registrosDeAuditoria({ acao: "senha_redefinida" })).toHaveLength(0);
+  });
+
+  test("valida a nova senha com as regras do cadastro, sem consumir o codigo", async () => {
+    const usuario = await cadastrar("Kika");
+
+    const curta = await api()
+      .post("/auth/recuperar-senha")
+      .send({ email: usuario.email, codigoRecuperacao: usuario.codigo, novaSenha: "curta" });
+    expect(curta.status).toBe(422);
+    expect(curta.body.campos).toEqual([{ campo: "novaSenha", mensagem: "A nova senha deve ter pelo menos 8 caracteres." }]);
+
+    const vazio = await api().post("/auth/recuperar-senha").send({});
+    expect(vazio.status).toBe(422);
+    expect(vazio.body.campos.map((c) => c.campo)).toEqual(["email", "codigoRecuperacao", "novaSenha"]);
+
+    const valida = await api()
+      .post("/auth/recuperar-senha")
+      .send({ email: usuario.email, codigoRecuperacao: usuario.codigo, novaSenha: NOVA_SENHA });
+    expect(valida.status).toBe(200);
+  });
+
+  test("duas recuperacoes simultaneas com o mesmo codigo: so uma vale", async () => {
+    const usuario = await cadastrar("Lia");
+    const pedido = (novaSenha) =>
+      api().post("/auth/recuperar-senha").send({ email: usuario.email, codigoRecuperacao: usuario.codigo, novaSenha });
+
+    const respostas = await Promise.all([pedido("primeira-senha-111"), pedido("segunda-senha-222")]);
+
+    expect(respostas.map((r) => r.status).sort()).toEqual([200, 401]);
+    expect(await registrosDeAuditoria({ acao: "senha_redefinida" })).toHaveLength(1);
   });
 });

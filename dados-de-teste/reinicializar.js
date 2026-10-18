@@ -11,9 +11,11 @@
 // Uso, a partir da raiz do repositorio:
 //   node dados-de-teste/reinicializar.js --confirmar
 // Senha dos usuarios de teste: variavel SENHA_SESSAO ou "sessao-equilog-2026".
+// Cada usuario recebe um codigo de recuperacao novo, exibido ao final.
 
 const { randomUUID } = require("node:crypto");
 const { PrismaClient, bcrypt, exigirBancoLocal } = require("./comum");
+const { gerarCodigo, normalizarCodigo } = require("../servico/src/dominio/codigoRecuperacao");
 
 const SENHA = process.env.SENHA_SESSAO ?? "sessao-equilog-2026";
 
@@ -99,8 +101,10 @@ async function main() {
 
       const usuarios = {};
       for (const u of USUARIOS) {
+        u.codigoRecuperacao = gerarCodigo();
+        const codigoRecuperacaoHash = await bcrypt.hash(normalizarCodigo(u.codigoRecuperacao), 12);
         usuarios[u.chave] = await tx.usuario.create({
-          data: { nome: u.nome, email: u.email, telefone: u.telefone, senhaHash },
+          data: { nome: u.nome, email: u.email, telefone: u.telefone, senhaHash, codigoRecuperacaoHash },
         });
       }
 
@@ -170,7 +174,7 @@ async function main() {
     console.log(`Base reinicializada: ${usuarios} usuarios, ${animais} animais, ${eventos} eventos, ${lembretes} lembretes.`);
     console.log(`Eventos por dominio: ${porDominio.map((l) => `${l.dominio} ${l.total}`).join(", ")}.`);
     console.log("Credenciais (senha comum: SENHA_SESSAO ou a padrao do script):");
-    for (const u of USUARIOS) console.log(`  ${u.chave.padEnd(13)} ${u.email}`);
+    for (const u of USUARIOS) console.log(`  ${u.chave.padEnd(13)} ${u.email.padEnd(28)} codigo de recuperacao ${u.codigoRecuperacao}`);
   } finally {
     await prisma.$disconnect();
   }

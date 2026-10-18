@@ -65,8 +65,10 @@ declarados obrigatórios; um novo domínio não altera as consultas existentes.
 ### Entidades
 
 **usuario**: `id` UUID PK, `nome` VARCHAR(120) NN, `email` VARCHAR(160) NN UK,
-`senha_hash` VARCHAR(255) NN, `telefone` VARCHAR(20), `ativo` BOOLEAN NN,
-`criado_em` TIMESTAMPTZ NN.
+`senha_hash` VARCHAR(255) NN, `codigo_recuperacao_hash` VARCHAR(255),
+`telefone` VARCHAR(20), `ativo` BOOLEAN NN, `criado_em` TIMESTAMPTZ NN.
+`codigo_recuperacao_hash` guarda o resumo bcrypt do código de recuperação de
+senha (decisão 9.7); não é dado pessoal e nunca é devolvido pela API.
 
 **papel**: `id` SERIAL PK, `nome` VARCHAR(40) NN UK, `descricao` VARCHAR(160).
 Carga inicial: `proprietario`, `veterinario`, `treinador`, `manejo`.
@@ -179,7 +181,8 @@ o estado para cumprido, adiado ou cancelado (RF19). Criação manual de lembrete
 |---|---|---|---|---|
 | POST | `/auth/login` | Autenticar e emitir tokens | Público | RF02 |
 | POST | `/auth/refresh` | Renovar token de acesso | Autenticado | RF03 |
-| POST | `/usuarios` | Cadastrar usuário | Público | RF01 |
+| POST | `/usuarios` | Cadastrar usuário; a resposta traz o código de recuperação, uma única vez | Público | RF01 |
+| POST | `/auth/recuperar-senha` | Definir nova senha com o código de recuperação | Público | RF01, RF02 (decisão 9.7) |
 | GET | `/animais` | Listar animais com vínculo vigente | Todos | RF08 |
 | POST | `/animais` | Cadastrar animal | Proprietário | RF04 |
 | GET | `/animais/{id}` | Consultar dados do animal | Todos | RF08 |
@@ -343,3 +346,20 @@ reverso, o que não altera o comportamento especificado.
 
 **9.6 Convite de usuário.** O sistema não envia e-mail. O fluxo alternativo do UC03
 apenas informa que o convidado não está cadastrado.
+
+**9.7 Recuperação de senha sem e-mail.** Coerente com 9.6, a recuperação não usa
+e-mail nem SMS. No cadastro, o servidor gera um código de recuperação de 12
+símbolos (alfabeto sem caracteres ambíguos, exibido como `XXXX-XXXX-XXXX`, cerca de
+59 bits), grava apenas o resumo bcrypt com custo 12 e o devolve uma única vez na
+resposta de `POST /usuarios`. O aplicativo o exibe e só prossegue quando a pessoa
+confirma que o anotou. Em `POST /auth/recuperar-senha` (público) a pessoa envia
+e-mail, código e nova senha (mesmas regras do RF01). Se conferirem, o servidor troca
+a senha, gera um novo código, devolve-o uma única vez e o anterior deixa de valer.
+A troca é condicionada ao resumo conferido, de modo que duas recuperações
+simultâneas com o mesmo código não passam ambas. Recusas (e-mail inexistente, conta
+sem código, código incorreto, conta inativa) têm resposta idêntica, 401 "E-mail ou
+código de recuperação não conferem.", e tempo de resposta equivalente; cada uma é
+auditada como `recuperacao_negada` com o motivo, e o sucesso como
+`senha_redefinida`. Limitações assumidas: quem perde o código e a senha precisa de
+nova conta; tokens de renovação já emitidos continuam válidos até expirar, pois os
+tokens não têm lista de revogação.

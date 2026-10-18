@@ -7,11 +7,14 @@ const jwt = require("jsonwebtoken");
 const usuarioRepo = require("../repositorios/usuarioRepo");
 const auditoria = require("./auditoriaServico");
 const { configuracao } = require("./configuracao");
+const { emTransacao } = require("../repositorios/prisma");
+const { gerarCodigo, normalizarCodigo } = require("../dominio/codigoRecuperacao");
 const { naoAutenticado } = require("../dominio/erros");
 const { validarObjeto, exigirObjeto, lancarSeHouverErros } = require("../dominio/validacao");
 
 const ALGORITMO = "HS256";
 const MENSAGEM_LOGIN_INVALIDO = "E-mail ou senha não conferem.";
+const MENSAGEM_RECUPERACAO_INVALIDA = "E-mail ou código de recuperação não conferem.";
 
 // Resumo usado quando o e-mail nao existe, para que a resposta leve o mesmo
 // tempo de uma senha incorreta e nao revele quais e-mails estao cadastrados.
@@ -120,4 +123,63 @@ async function renovar(contexto, corpo) {
   return emitirTokens(usuario.id);
 }
 
-module.exports = { entrar, renovar, verificarTokenAcesso, resumirSenha, emitirTokens };
+const REGRAS_RECUPERACAO = {
+  email: { tipo: "texto", obrigatorio: true, max: 320, rotulo: "o e-mail" },
+  codigoRecuperacao: { tipo: "texto", obrigatorio: true, max: 64, rotulo: "o código de recuperação" },
+  // mesmas regras do cadastro (RF01)
+  novaSenha: { tipo: "senha", obrigatorio: true, min: 8, max: 72, rotulo: "a nova senha" },
+};
+
+// Recuperacao de senha sem e-mail (decisao 9.7): quem apresenta o codigo
+// recebido no cadastro define nova senha e recebe um novo codigo; o anterior
+// deixa de valer. Mesma resposta para todos os motivos de recusa.
+async function recuperarSenha(contexto, corpo) {
+  const { valores, erros } = validarObjeto(exigirObjeto(corpo), REGRAS_RECUPERACAO);
+  lancarSeHouverErros(erros);
+
+  const email = valores.email.toLowerCase();
+  const usuario = await usuarioRepo.buscarPorEmail(email);
+  const resumoGravado = usuario?.codigoRecuperacaoHash ?? null;
+  // compara mesmo sem usuario ou sem codigo, para manter o tempo de resposta
+  const confere = await bcrypt.compare(normalizarCodigo(valores.codigoRecuperacao), resumoGravado ?? (await obterResumoFicticio()));
+
+  const negar = async (motivo) => {
+    await auditoria.registrar({
+      usuarioId: usuario?.id ?? null,
+      identificadorTentativa: usuario ? null : email,
+      acao: "recuperacao_negada",
+      entidade: "usuario",
+      entidadeId: usuario?.id ?? null,
+      motivo,
+      enderecoIp: contexto.enderecoIp,
+    });
+    throw naoAutenticado(MENSAGEM_RECUPERACAO_INVALIDA);
+  };
+
+  if (!usuario) return negar("usuario_inexistente");
+  if (!resumoGravado) return negar("sem_codigo");
+  if (!confere) return negar("codigo_incorreto");
+  if (!usuario.ativo) return negar("conta_inativa");
+
+  const novoCodigo = gerarCodigo();
+  const [senhaHash, codigoRecuperacaoHash] = await Promise.all([
+    resumirSenha(valores.novaSenha),
+    resumirSenha(normalizarCodigo(novoCodigo)),
+  ]);
+  const trocou = await emTransacao(async (tx) => {
+    const ok = await usuarioRepo.trocarCredenciais(usuario.id, resumoGravado, { senhaHash, codigoRecuperacaoHash }, tx);
+    if (ok) {
+      await auditoria.registrar(
+        { usuarioId: usuario.id, acao: "senha_redefinida", entidade: "usuario", entidadeId: usuario.id, enderecoIp: contexto.enderecoIp },
+        tx,
+      );
+    }
+    return ok;
+  });
+  // outra recuperacao usou o mesmo codigo no intervalo
+  if (!trocou) return negar("codigo_ja_usado");
+
+  return { codigoRecuperacao: novoCodigo };
+}
+
+module.exports = { entrar, renovar, recuperarSenha, verificarTokenAcesso, resumirSenha, emitirTokens };

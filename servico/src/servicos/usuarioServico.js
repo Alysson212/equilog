@@ -4,6 +4,7 @@ const usuarioRepo = require("../repositorios/usuarioRepo");
 const { emTransacao, violouUnicidade } = require("../repositorios/prisma");
 const auditoria = require("./auditoriaServico");
 const { resumirSenha } = require("./autenticacaoServico");
+const { gerarCodigo, normalizarCodigo } = require("../dominio/codigoRecuperacao");
 const { falhaDeValidacao } = require("../dominio/erros");
 const { validarObjeto, exigirObjeto, lancarSeHouverErros } = require("../dominio/validacao");
 
@@ -30,11 +31,16 @@ async function cadastrar(contexto, corpo) {
 
   if (await usuarioRepo.buscarPorEmail(valores.email)) throw falhaDeValidacao([EMAIL_EM_USO]);
 
-  const senhaHash = await resumirSenha(valores.senha);
+  // o codigo de recuperacao e devolvido uma unica vez, nesta resposta (decisao 9.7)
+  const codigoRecuperacao = gerarCodigo();
+  const [senhaHash, codigoRecuperacaoHash] = await Promise.all([
+    resumirSenha(valores.senha),
+    resumirSenha(normalizarCodigo(codigoRecuperacao)),
+  ]);
   try {
     const usuario = await emTransacao(async (tx) => {
       const criado = await usuarioRepo.criar(
-        { nome: valores.nome, email: valores.email, telefone: valores.telefone, senhaHash },
+        { nome: valores.nome, email: valores.email, telefone: valores.telefone, senhaHash, codigoRecuperacaoHash },
         tx,
       );
       await auditoria.registrar(
@@ -43,7 +49,7 @@ async function cadastrar(contexto, corpo) {
       );
       return criado;
     });
-    return paraRepresentacao(usuario);
+    return { ...paraRepresentacao(usuario), codigoRecuperacao };
   } catch (erro) {
     if (violouUnicidade(erro)) throw falhaDeValidacao([EMAIL_EM_USO]);
     throw erro;

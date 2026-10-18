@@ -105,7 +105,8 @@ usuário, animal e papel vigente (seção 4 da especificação).
 |---|---|---|---|
 | POST | `/auth/login` | Autenticar e emitir tokens | RF02 |
 | POST | `/auth/refresh` | Renovar token de acesso | RF03 |
-| POST | `/usuarios` | Cadastrar usuário | RF01 |
+| POST | `/usuarios` | Cadastrar usuário (devolve o código de recuperação uma única vez) | RF01 |
+| POST | `/auth/recuperar-senha` | Nova senha com o código de recuperação (decisão 9.7) | RF01, RF02 |
 | GET | `/animais` | Listar animais com vínculo vigente | RF08 |
 | POST | `/animais` | Cadastrar animal | RF04 |
 | GET | `/animais/{id}` | Consultar animal | RF08 |
@@ -159,7 +160,8 @@ node dados-de-teste/medir-ct12.js                  # mede a linha do tempo (RNF0
 `reinicializar.js` **apaga todos os dados de uso** da base local e cria 2 animais,
 30 eventos nos quatro domínios e um usuário por papel
 (`proprietario@`, `veterinario@`, `treinador@` e `manejo@sessao.equilog`), com a
-senha da variável `SENHA_SESSAO` ou a padrão do script. Os scripts recusam
+senha da variável `SENHA_SESSAO` ou a padrão do script. Cada usuário recebe um
+código de recuperação de senha novo, exibido ao final da execução. Os scripts recusam
 bancos que não sejam locais.
 
 ## Banco de dados
@@ -203,6 +205,28 @@ wsl -d Ubuntu-24.04 --cd /mnt/c/projetos/equilog -- docker compose up -d
 
 Use `127.0.0.1`, e não `localhost`, na `DATABASE_URL` do hospedeiro: `localhost`
 resolve primeiro para IPv6, que não é encaminhado.
+
+### Problemas observados após reiniciar o Windows
+
+- **WSL não inicia com erro 0x8007054f** (rede espelhada): reinicie o serviço de
+  rede de contêineres em um PowerShell como administrador, `Restart-Service hns`, e
+  abra o WSL de novo.
+- **Docker não consegue publicar as portas 3080, 3443 ou 5432** ("bind: An attempt
+  was made to access a socket in a way forbidden"): o Windows reservou faixas
+  dinâmicas que cobrem essas portas (`netsh int ipv4 show excludedportrange
+  protocol=tcp`). Como administrador, reserve as três portas para uso próprio, de
+  forma persistente:
+
+  ```powershell
+  net stop winnat
+  foreach ($p in 3080, 3443, 5432) {
+    netsh int ipv4 add excludedportrange protocol=tcp startport=$p numberofports=1 store=persistent
+  }
+  net start winnat
+  ```
+
+- **Serviço parado em `P1001`** (não alcança o banco) depois que o banco voltou:
+  recrie só o contêiner do serviço, `docker compose up -d --force-recreate servico`.
 
 ## Dependências e alertas conhecidos
 
