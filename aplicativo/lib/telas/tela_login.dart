@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../componentes/mensagens.dart';
 import '../servicos/dependencias.dart';
 import 'tela_animais.dart';
+import 'tela_cadastro.dart';
 
 class TelaLogin extends StatefulWidget {
   const TelaLogin({super.key});
@@ -86,6 +87,13 @@ class _TelaLoginState extends State<TelaLogin> {
                   child: _enviando
                       ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
                       : const Text('Entrar'),
+                ),
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: _enviando
+                      ? null
+                      : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TelaCadastro())),
+                  child: const Text('Não tem conta? Criar conta'),
                 ),
               ]),
             ),

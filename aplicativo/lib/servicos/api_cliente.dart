@@ -54,6 +54,22 @@ class ApiCliente {
     return usuario;
   }
 
+  // Cadastro publico (RF01) seguido de autenticacao com as mesmas credenciais
+  Future<Usuario> cadastrar({
+    required String nome,
+    required String email,
+    String? telefone,
+    required String senha,
+  }) async {
+    await _requisitar(
+      'POST',
+      '/usuarios',
+      corpo: {'nome': nome, 'email': email, 'telefone': ?telefone, 'senha': senha},
+      autenticar: false,
+    );
+    return entrar(email, senha);
+  }
+
   // Restaura a sessao a partir do token de renovacao guardado
   Future<bool> renovar() {
     return _renovacaoEmAndamento ??= _renovar().whenComplete(() => _renovacaoEmAndamento = null);
