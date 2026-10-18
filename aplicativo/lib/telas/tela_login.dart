@@ -7,6 +7,7 @@ import '../componentes/mensagens.dart';
 import '../servicos/dependencias.dart';
 import 'tela_animais.dart';
 import 'tela_cadastro.dart';
+import 'tela_recuperar_senha.dart';
 
 class TelaLogin extends StatefulWidget {
   const TelaLogin({super.key});
@@ -94,6 +95,13 @@ class _TelaLoginState extends State<TelaLogin> {
                       ? null
                       : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TelaCadastro())),
                   child: const Text('Não tem conta? Criar conta'),
+                ),
+                TextButton(
+                  onPressed: _enviando
+                      ? null
+                      : () => Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => TelaRecuperarSenha(email: _email.text.trim()))),
+                  child: const Text('Esqueci a senha'),
                 ),
               ]),
             ),

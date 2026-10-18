@@ -54,20 +54,37 @@ class ApiCliente {
     return usuario;
   }
 
-  // Cadastro publico (RF01) seguido de autenticacao com as mesmas credenciais
-  Future<Usuario> cadastrar({
+  // Cadastro publico (RF01) seguido de autenticacao com as mesmas credenciais.
+  // Devolve tambem o codigo de recuperacao, que o servidor mostra uma unica vez.
+  Future<(Usuario, String)> cadastrar({
     required String nome,
     required String email,
     String? telefone,
     required String senha,
   }) async {
-    await _requisitar(
+    final corpo = await _requisitar(
       'POST',
       '/usuarios',
       corpo: {'nome': nome, 'email': email, 'telefone': ?telefone, 'senha': senha},
       autenticar: false,
     );
-    return entrar(email, senha);
+    return (await entrar(email, senha), corpo['codigoRecuperacao'] as String);
+  }
+
+  // Recuperacao de senha pelo codigo do cadastro (decisao 9.7), seguida de
+  // autenticacao com a nova senha. Devolve o novo codigo; o anterior deixa de valer.
+  Future<(Usuario, String)> recuperarSenha({
+    required String email,
+    required String codigoRecuperacao,
+    required String novaSenha,
+  }) async {
+    final corpo = await _requisitar(
+      'POST',
+      '/auth/recuperar-senha',
+      corpo: {'email': email, 'codigoRecuperacao': codigoRecuperacao, 'novaSenha': novaSenha},
+      autenticar: false,
+    );
+    return (await entrar(email, novaSenha), corpo['codigoRecuperacao'] as String);
   }
 
   // Restaura a sessao a partir do token de renovacao guardado

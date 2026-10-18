@@ -1,5 +1,5 @@
 // Operacoes do aplicativo contra o SERVIDOR REAL: cadastro pela tela de
-// criar conta (RF01), edicao e inativacao do animal (RF05), edicao do evento
+// criar conta (RF01), recuperacao de senha pelo codigo (decisao 9.7), edicao e inativacao do animal (RF05), edicao do evento
 // com controle de versao (RF15) e exclusao logica (RF16).
 
 import 'dart:io';
@@ -32,10 +32,12 @@ void main() {
       final api = novoCliente();
       final email = emailUnico('cadastro');
 
-      final usuario = await api.cadastrar(nome: 'Nova Pessoa', email: email, telefone: '(35) 98888-0000', senha: 'senha-segura-123');
+      final (usuario, codigo) =
+          await api.cadastrar(nome: 'Nova Pessoa', email: email, telefone: '(35) 98888-0000', senha: 'senha-segura-123');
 
       expect(usuario.nome, 'Nova Pessoa');
       expect(usuario.email, email);
+      expect(codigo, matches(RegExp(r'^[2-9A-Z]{4}-[2-9A-Z]{4}-[2-9A-Z]{4}$')));
       expect(api.autenticado, isTrue);
       expect(await api.credenciais.lerTokenRenovacao(), isNotNull);
       expect(await EquilogServico(api).listarAnimais(), isEmpty);
@@ -50,6 +52,35 @@ void main() {
         throwsA(isA<ErroApi>()
             .having((e) => e.status, 'status', 422)
             .having((e) => e.mensagem, 'mensagem', 'Já existe uma conta com este e-mail.')),
+      );
+    });
+  });
+
+  group('recuperar senha pelo código (decisão 9.7)', () {
+    test('com o código anotado cria nova senha, entra e recebe novo código', () async {
+      final email = emailUnico('esqueceu');
+      final (_, codigo) = await novoCliente().cadastrar(nome: 'Esquecida', email: email, senha: 'senha-segura-123');
+
+      final api = novoCliente();
+      // digitado em minúsculas, como a pessoa pode ter anotado
+      final (usuario, novoCodigo) =
+          await api.recuperarSenha(email: email, codigoRecuperacao: codigo.toLowerCase(), novaSenha: 'nova-senha-456');
+      expect(usuario.email, email);
+      expect(api.autenticado, isTrue);
+      expect(novoCodigo, isNot(codigo));
+
+      expect(
+        () => novoCliente().entrar(email, 'senha-segura-123'),
+        throwsA(isA<ErroApi>().having((e) => e.status, 'status', 401)),
+      );
+      await novoCliente().entrar(email, 'nova-senha-456');
+
+      // o código antigo não vale mais
+      expect(
+        () => novoCliente().recuperarSenha(email: email, codigoRecuperacao: codigo, novaSenha: 'outra-senha-789'),
+        throwsA(isA<ErroApi>()
+            .having((e) => e.status, 'status', 401)
+            .having((e) => e.mensagem, 'mensagem', 'E-mail ou código de recuperação não conferem.')),
       );
     });
   });
@@ -84,7 +115,7 @@ void main() {
 
     test('autor edita com a versão lida; versão antiga dá conflito; exclusão some da linha do tempo', () async {
       final api = novoCliente();
-      final usuario = await api.cadastrar(nome: 'Treinadora', email: emailUnico('autora'), senha: 'senha-segura-123');
+      final (usuario, _) = await api.cadastrar(nome: 'Treinadora', email: emailUnico('autora'), senha: 'senha-segura-123');
       final servico = EquilogServico(api);
       final animal = await servico.cadastrarAnimal({'nome': 'Faísca', 'sexo': 'M'});
 

@@ -1,11 +1,12 @@
 // Cadastro de usuario (RF01). Apenas nome, e-mail e telefone (RNF12); o
-// telefone e opcional. Concluido o cadastro, a pessoa ja entra no aplicativo.
+// telefone e opcional. Concluido o cadastro, a pessoa ve o codigo de
+// recuperacao (decisao 9.7) e entra no aplicativo.
 
 import 'package:flutter/material.dart';
 
 import '../componentes/mensagens.dart';
 import '../servicos/dependencias.dart';
-import 'tela_animais.dart';
+import 'tela_codigo_recuperacao.dart';
 
 class TelaCadastro extends StatefulWidget {
   const TelaCadastro({super.key});
@@ -37,14 +38,16 @@ class _TelaCadastroState extends State<TelaCadastro> {
     setState(() => _enviando = true);
     final dependencias = Dependencias.de(context);
     try {
-      dependencias.usuario = await dependencias.api.cadastrar(
+      final (usuario, codigo) = await dependencias.api.cadastrar(
         nome: _nome.text.trim(),
         email: _email.text.trim(),
         telefone: _telefone.text.trim().isEmpty ? null : _telefone.text.trim(),
         senha: _senha.text,
       );
+      dependencias.usuario = usuario;
       if (!mounted) return;
-      Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const TelaAnimais()), (_) => false);
+      Navigator.of(context)
+          .pushAndRemoveUntil(MaterialPageRoute(builder: (_) => TelaCodigoRecuperacao(codigo: codigo)), (_) => false);
     } catch (erro) {
       if (mounted) mostrarErro(context, erro);
     } finally {
