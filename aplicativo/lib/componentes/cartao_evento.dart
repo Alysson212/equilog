@@ -52,7 +52,9 @@ String _valor(String campo, Object? valor) {
 
 class CartaoEvento extends StatelessWidget {
   final ItemLinhaDoTempo item;
-  const CartaoEvento({super.key, required this.item});
+  // abre as acoes do registro (editar, excluir); nulo quando nao ha acao
+  final VoidCallback? aoTocar;
+  const CartaoEvento({super.key, required this.item, this.aoTocar});
 
   @override
   Widget build(BuildContext context) {
@@ -64,7 +66,10 @@ class CartaoEvento extends StatelessWidget {
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: Padding(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: aoTocar,
+        child: Padding(
         padding: const EdgeInsets.all(12),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           CircleAvatar(backgroundColor: cor.withValues(alpha: 0.12), child: Icon(iconesDominio[item.dominio], color: cor)),
@@ -87,6 +92,7 @@ class CartaoEvento extends StatelessWidget {
             ]),
           ),
         ]),
+        ),
       ),
     );
   }

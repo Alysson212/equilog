@@ -170,7 +170,7 @@ class _TelaAnimaisState extends State<TelaAnimais> {
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.of(context)
                   .push(MaterialPageRoute(builder: (_) => TelaLinhaDoTempo(animal: animal)))
-                  .then((_) => _contarPendentes()),
+                  .then((_) => _carregar()),
             ),
         ],
       ),

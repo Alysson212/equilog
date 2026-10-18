@@ -17,6 +17,7 @@ import '../modelos/permissoes.dart';
 import '../servicos/dependencias.dart';
 import '../servicos/equilog_servico.dart';
 import 'tela_acessos.dart';
+import 'tela_editar_animal.dart';
 import 'tela_registro_evento.dart';
 
 class TelaLinhaDoTempo extends StatefulWidget {
@@ -43,7 +44,8 @@ class _TelaLinhaDoTempoState extends State<TelaLinhaDoTempo> {
   String? _autorId;
   StreamSubscription<void>? _alteracoes;
 
-  Animal get animal => widget.animal;
+  // atualizado quando o proprietario edita o cadastro (RF05)
+  late Animal animal = widget.animal;
 
   @override
   void initState() {
@@ -157,6 +159,71 @@ class _TelaLinhaDoTempoState extends State<TelaLinhaDoTempo> {
     if (salvo == true) await _recarregar();
   }
 
+  Future<void> _editarAnimal() async {
+    final atualizado = await Navigator.of(context).push<Animal>(
+      MaterialPageRoute(builder: (_) => TelaEditarAnimal(animal: animal)),
+    );
+    if (atualizado != null && mounted) setState(() => animal = atualizado);
+  }
+
+  // Acoes sobre um registro ja confirmado pelo servidor. Editar: so o autor,
+  // com E no dominio (RF15). Excluir: o autor ou o proprietario (RF16).
+  // Conveniencia visual; o servidor decide e responde 403 fora dessas regras.
+  Future<void> _abrirAcoes(ItemLinhaDoTempo item) async {
+    final usuarioId = Dependencias.de(context).usuario!.id;
+    final ehAutor = item.autorId == usuarioId;
+    final podeEditar = ehAutor && papelPode(animal.papel, Acao.editar, item.dominio);
+    final podeExcluir = ehAutor || animal.papel == 'proprietario';
+    if (!podeEditar && !podeExcluir) return;
+
+    final acao = await showModalBottomSheet<String>(
+      context: context,
+      builder: (contexto) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(title: Text(item.titulo), subtitle: Text('${nomesDominio[item.dominio]} · ${exibirDataHora(item.dataEvento)}')),
+          const Divider(height: 1),
+          if (podeEditar)
+            ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: const Text('Editar registro'),
+              onTap: () => Navigator.pop(contexto, 'editar'),
+            ),
+          if (podeExcluir)
+            ListTile(
+              leading: Icon(Icons.delete_outline, color: Theme.of(contexto).colorScheme.error),
+              title: Text('Excluir registro', style: TextStyle(color: Theme.of(contexto).colorScheme.error)),
+              onTap: () => Navigator.pop(contexto, 'excluir'),
+            ),
+        ]),
+      ),
+    );
+    if (!mounted || acao == null) return;
+
+    if (acao == 'editar') {
+      final salvo = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(builder: (_) => TelaRegistroEvento(animal: animal, evento: item)),
+      );
+      if (salvo == true) await _recarregar();
+      return;
+    }
+
+    final seguir = await confirmar(
+      context,
+      titulo: 'Excluir registro',
+      texto: '"${item.titulo}" deixa de aparecer na linha do tempo. O registro é preservado no histórico do sistema.',
+      acao: 'Excluir',
+    );
+    if (!seguir || !mounted) return;
+    try {
+      await Dependencias.de(context).servico.excluirEvento(item.id);
+      if (!mounted) return;
+      mostrarMensagem(context, 'Registro excluído.');
+      await _recarregar();
+    } catch (erro) {
+      if (mounted) mostrarErro(context, erro);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final legiveis = dominiosLegiveis(animal.papel);
@@ -167,6 +234,12 @@ class _TelaLinhaDoTempoState extends State<TelaLinhaDoTempo> {
       appBar: AppBar(
         title: Text(animal.nome),
         actions: [
+          if (papelPode(animal.papel, Acao.editar, 'animal'))
+            IconButton(
+              tooltip: 'Editar animal',
+              icon: const Icon(Icons.edit_outlined),
+              onPressed: _editarAnimal,
+            ),
           if (ehProprietario)
             IconButton(
               tooltip: 'Acessos',
@@ -264,7 +337,11 @@ class _TelaLinhaDoTempoState extends State<TelaLinhaDoTempo> {
         padding: const EdgeInsets.only(bottom: 96),
         itemCount: todos.length + 1,
         itemBuilder: (context, indice) {
-          if (indice < todos.length) return CartaoEvento(item: todos[indice]);
+          if (indice < todos.length) {
+            final item = todos[indice];
+            // registros ainda na fila local nao tem acoes: so existem no aparelho
+            return CartaoEvento(item: item, aoTocar: item.situacaoLocal == null ? () => _abrirAcoes(item) : null);
+          }
           if (_carregando) return const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator()));
           if (_erro != null) {
             return Padding(

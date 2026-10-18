@@ -8,6 +8,11 @@
 //
 // O registro e gravado na base local, com id gerado no aparelho, e depois
 // enviado pela fila de sincronizacao (RF21, RNF06).
+//
+// Com um evento informado, a tela edita esse registro (RF15): o dominio nao
+// muda, os campos chegam preenchidos e a alteracao vai direto ao servidor com
+// a versao conhecida, para que uma edicao concorrente seja detectada (409).
+// A edicao exige conexao; a fila offline guarda apenas registros novos.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -18,11 +23,14 @@ import '../componentes/mensagens.dart';
 import '../modelos/entidades.dart';
 import '../modelos/formularios_evento.dart';
 import '../modelos/permissoes.dart';
+import '../servicos/api_cliente.dart';
 import '../servicos/dependencias.dart';
 
 class TelaRegistroEvento extends StatefulWidget {
   final Animal animal;
-  const TelaRegistroEvento({super.key, required this.animal});
+  // evento a editar; nulo para um registro novo
+  final ItemLinhaDoTempo? evento;
+  const TelaRegistroEvento({super.key, required this.animal, this.evento});
 
   @override
   State<TelaRegistroEvento> createState() => _TelaRegistroEventoState();
@@ -43,12 +51,36 @@ class _TelaRegistroEventoState extends State<TelaRegistroEvento> {
   Map<String, List<TipoEvento>> _tipos = tiposDeContingencia;
   OrigemTipos? _origemTipos;
 
+  bool get _editando => widget.evento != null;
+
   @override
   void initState() {
     super.initState();
-    _dominios = dominiosRegistraveis(widget.animal.papel);
-    _dominio = _dominios.first;
+    final evento = widget.evento;
+    if (evento == null) {
+      _dominios = dominiosRegistraveis(widget.animal.papel);
+      _dominio = _dominios.first;
+      return;
+    }
+    // edicao: dominio fixo e campos preenchidos com o estado atual do registro
+    _dominios = [evento.dominio];
+    _dominio = evento.dominio;
+    _dataEvento = evento.dataEvento.toLocal();
+    _titulo.text = evento.titulo;
+    _observacao.text = evento.observacao ?? '';
+    _tipo = _tipoPorNome(tiposDeContingencia, evento.tipoEvento);
+    for (final campo in camposPorDominio[evento.dominio]!) {
+      final valor = evento.detalhe[campo.nome];
+      if (valor == null) continue;
+      _controlador(campo.nome).text =
+          campo.tipo == TipoCampo.decimal ? valor.toString().replaceAll('.', ',') : valor.toString();
+    }
+    final retorno = evento.detalhe['dataRetorno'] as String?;
+    if (retorno != null) _dataRetorno = DateTime.parse(retorno);
   }
+
+  TipoEvento? _tipoPorNome(Map<String, List<TipoEvento>> tipos, String nome) =>
+      (tipos[_dominio] ?? const <TipoEvento>[]).where((t) => t.nome == nome).firstOrNull;
 
   @override
   void didChangeDependencies() {
@@ -62,7 +94,7 @@ class _TelaRegistroEventoState extends State<TelaRegistroEvento> {
     setState(() {
       _tipos = tipos;
       _origemTipos = origem;
-      if (_tipo != null && !(tipos[_dominio] ?? const []).contains(_tipo)) _tipo = null;
+      if (_tipo != null) _tipo = _tipoPorNome(tipos, _tipo!.nome);
     });
   }
 
@@ -141,6 +173,11 @@ class _TelaRegistroEventoState extends State<TelaRegistroEvento> {
     }
     if (!valido) return;
 
+    if (_editando) {
+      await _salvarEdicao();
+      return;
+    }
+
     setState(() => _salvando = true);
     final dependencias = Dependencias.de(context);
     final detalhe = <String, dynamic>{
@@ -169,6 +206,43 @@ class _TelaRegistroEventoState extends State<TelaRegistroEvento> {
         enviado ? 'Registro salvo e enviado.' : 'Registro salvo no aparelho. Será enviado quando houver conexão.',
       );
       Navigator.pop(context, true);
+    } catch (erro) {
+      if (mounted) mostrarErro(context, erro);
+    } finally {
+      if (mounted) setState(() => _salvando = false);
+    }
+  }
+
+  // RF15: envia o estado completo do formulario; campo opcional esvaziado vai
+  // como nulo. A versao lida permite ao servidor recusar edicao concorrente.
+  Future<void> _salvarEdicao() async {
+    setState(() => _salvando = true);
+    final evento = widget.evento!;
+    final detalhe = <String, dynamic>{
+      for (final campo in camposPorDominio[_dominio]!) campo.nome: _valorDoCampo(campo),
+      if (_dominio == 'saude') 'dataRetorno': _dataRetorno == null ? null : paraDataIso(_dataRetorno!),
+    };
+    try {
+      await Dependencias.de(context).servico.editarEvento(evento.id, {
+        'versao': evento.versao,
+        'tipoEvento': _tipo!.nome,
+        'dataEvento': paraDataHoraIso(_dataEvento),
+        'titulo': _titulo.text.trim(),
+        'observacao': _observacao.text.trim().isEmpty ? null : _observacao.text.trim(),
+        'detalhe': detalhe,
+      });
+      if (!mounted) return;
+      mostrarMensagem(context, 'Registro alterado.');
+      Navigator.pop(context, true);
+    } on ErroApi catch (erro) {
+      if (!mounted) return;
+      if (erro.status == 409) {
+        mostrarMensagem(context, 'Este registro foi alterado por outra pessoa. Volte e abra de novo para ver a versão atual.', erro: true);
+      } else {
+        mostrarErro(context, erro);
+      }
+    } on SemConexaoException {
+      if (mounted) mostrarMensagem(context, 'Para alterar um registro é preciso estar com conexão.', erro: true);
     } catch (erro) {
       if (mounted) mostrarErro(context, erro);
     } finally {
@@ -211,7 +285,7 @@ class _TelaRegistroEventoState extends State<TelaRegistroEvento> {
     );
 
     return Scaffold(
-      appBar: AppBar(title: Text('Novo registro · ${widget.animal.nome}')),
+      appBar: AppBar(title: Text('${_editando ? 'Editar registro' : 'Novo registro'} · ${widget.animal.nome}')),
       body: Form(
         key: _formulario,
         child: ListView(padding: const EdgeInsets.all(16), children: [
@@ -277,7 +351,7 @@ class _TelaRegistroEventoState extends State<TelaRegistroEvento> {
           FilledButton.icon(
             onPressed: _salvando ? null : _salvar,
             icon: const Icon(Icons.save_outlined),
-            label: const Text('Salvar registro'),
+            label: Text(_editando ? 'Salvar alterações' : 'Salvar registro'),
             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
           ),
         ]),

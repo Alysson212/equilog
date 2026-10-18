@@ -33,6 +33,17 @@ class EquilogServico {
   Future<Animal> cadastrarAnimal(Map<String, dynamic> dados) async =>
       Animal.deJson(await api.post('/animais', dados) as Map<String, dynamic>);
 
+  // RF05: edicao e inativacao (ativo = false) pelo proprietario
+  Future<Animal> editarAnimal(String animalId, Map<String, dynamic> alteracoes) async =>
+      Animal.deJson(await api.patch('/animais/$animalId', alteracoes) as Map<String, dynamic>);
+
+  // RF15: edicao pelo autor; versao informada detecta alteracao concorrente (409)
+  Future<ItemLinhaDoTempo> editarEvento(String eventoId, Map<String, dynamic> alteracoes) async =>
+      ItemLinhaDoTempo.deJson(await api.patch('/eventos/$eventoId', alteracoes) as Map<String, dynamic>);
+
+  // RF16: exclusao logica pelo autor ou pelo proprietario
+  Future<void> excluirEvento(String eventoId) => api.delete('/eventos/$eventoId');
+
   Future<List<dynamic>> listarTiposEvento() async =>
       (await api.get('/tipos-evento') as Map<String, dynamic>)['itens'] as List<dynamic>;
 
