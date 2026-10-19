@@ -363,3 +363,51 @@ auditada como `recuperacao_negada` com o motivo, e o sucesso como
 `senha_redefinida`. Limitações assumidas: quem perde o código e a senha precisa de
 nova conta; tokens de renovação já emitidos continuam válidos até expirar, pois os
 tokens não têm lista de revogação.
+
+## 10. Stack e regras de implementação
+
+### Stack
+
+As escolhas são justificadas no Quadro 9 do TCC.
+
+| Camada | Tecnologia |
+|---|---|
+| Aplicativo móvel | Flutter (Dart), alvo Android 9 ou superior |
+| Serviço | Node.js 20 LTS com Express 4 |
+| Banco | PostgreSQL 16 |
+| ORM e migrações | Prisma |
+| Base local no dispositivo | SQLite via sqflite |
+| Autenticação | JWT (RFC 7519), token de acesso de 15 minutos e de renovação de 30 dias |
+| Senhas | bcrypt, fator de custo 12 |
+| Testes do serviço | Jest (unidade e integração) |
+| Notificações | flutter_local_notifications |
+| Ambiente | Docker Compose (serviço e banco) |
+
+### Regras
+
+1. **Nenhuma inferência clínica** (RNF11). O sistema não sugere, não diagnostica,
+   não recomenda conduta, não calcula intervalo de procedimento e não prediz
+   desempenho. Lembrete só nasce de data digitada por uma pessoa.
+2. **Autorização sempre no servidor** (RNF03). O aplicativo esconde da interface o
+   que o papel não pode fazer, mas a decisão de acesso ocorre no middleware do
+   serviço, para toda rota.
+3. **Papel por animal.** A permissão se resolve pela tripla usuário, animal e papel
+   vigente na data. A mesma pessoa pode ser veterinária de um animal e
+   proprietária de outro.
+4. **Consulta ao vínculo a cada requisição.** O token não carrega papéis; assim a
+   revogação de acesso tem efeito imediato (RF07).
+5. **Filtro de permissão dentro da consulta ao banco** (UC08). Eventos de domínios
+   que o papel não pode ler não são recuperados, contados nem revelados.
+6. **Identificador gerado no cliente** (RF21, RNF06). Eventos recebem UUID no
+   dispositivo antes do envio, para que o registro sem conexão sobreviva e o
+   reenvio seja idempotente.
+7. **Toda escrita e toda negação vão para a trilha de auditoria** (RNF04).
+8. **Só os dados pessoais necessários** (RNF12): nome, e-mail e telefone.
+
+### Convenções
+
+- Código, identificadores e comentários em português, sem acentos em nomes de
+  variáveis, tabelas e colunas; mensagens ao usuário em português com acentuação.
+- Tabelas e colunas em `snake_case`, como no DER; classes em `PascalCase`.
+- Mensagens de erro em linguagem comum, sem detalhe interno (RNF08).
+- Nenhum segredo no repositório: apenas os modelos `.env.example` são versionados.
